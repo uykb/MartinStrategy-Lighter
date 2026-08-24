@@ -103,8 +103,8 @@ type SymbolInfo struct {
 	MinQty            float64 // 最小下单数量
 	StepSize          float64 // 数量步长（如 0.01）
 	TickSize          float64 // 价格步长（如 0.01）
-	SzDecimals        int     // Hyperliquid 专用：size 的小数位数
-	MaxPriceDecimals  int     // Hyperliquid 专用：价格最大小数位 = 6 - szDecimals
+	SzDecimals        int     // 数量的小数位数
+	MaxPriceDecimals  int     // 价格最大小数位
 }
 
 // ---------------------------------------------------------------------------
@@ -135,7 +135,7 @@ type ExchangeAdapter interface {
 	// GetPosition 获取当前交易对的持仓信息
 	GetPosition() (*Position, error)
 
-	// GetBalance 获取账户可用余额（Hyperliquid 为 USDC）
+	// GetBalance 获取账户可用余额（结算货币，通常为 USDC）
 	GetBalance() (float64, error)
 
 	// ---- 订单 ----

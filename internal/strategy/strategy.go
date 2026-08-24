@@ -39,7 +39,7 @@ const (
 	StateClosing     State = "CLOSING"      // 平仓中
 )
 
-// MinOrderValue 是最低下单金额（Hyperliquid 为 USDC，最低约 10 USDC）
+// MinOrderValue 是最低下单金额（通常为 10 USDC）
 const MinOrderValue = 10.0
 
 // MaxTickStaleness 行情最大允许延迟（超过此时间的行情视为过期，丢弃不处理）
@@ -107,7 +107,7 @@ type MartingaleStrategy struct {
 	cancel context.CancelFunc
 
 	// ★ 运行时修复：初始同步完成标志。
-	// Hyperliquid WS 订阅 orderUpdates 后会持续推送历史订单状态（含已成交），
+	// 交易所 WS 订阅后可能持续推送历史订单状态（含已成交），
 	// 推送可能持续数秒且顺序错乱（如先推 SELL 再推 BUY）。
 	// 时间窗口不可靠，改用标志位：syncState + 3s 延迟后才允许处理成交事件。
 	initialSyncDone atomic.Bool
@@ -539,7 +539,7 @@ func (s *MartingaleStrategy) handleOrderUpdate(ctx context.Context, event core.E
 
 	if order.Status == "FILLED" {
 		// ★ 运行时修复：syncState 完成前忽略所有历史成交事件。
-		// Hyperliquid WS 可能持续推送数秒历史事件且顺序错乱。
+		// 交易所 WS 可能持续推送数秒历史事件且顺序错乱。
 		// 仅在 initialSyncDone 后才处理成交，保证 FSM 状态不被历史事件干扰。
 		if !s.initialSyncDone.Load() {
 			utils.Logger.Info("初始同步未完成，忽略历史成交事件",
@@ -1052,7 +1052,7 @@ func (s *MartingaleStrategy) placeGridOrders() {
 		price := currentPriceLevel * (1 - stepPct)
 		currentPriceLevel = price
 
-		// ★ Hyperliquid 5 位有效数字截断
+		// ★ 价格截断到精度限制
 		price = utils.RoundToSigFigs(price, 5, s.maxPriceDecimals)
 
 		utils.Logger.Info("放置安全订单",
@@ -1352,7 +1352,7 @@ func (s *MartingaleStrategy) updateTP() {
 			return
 		}
 		// modify 失败（可能订单已成交/已取消/交易所拒绝/HTTP 超时）。
-		// ★ 对账防重复：Hyperliquid modify 等价于原子 cancel+place，HTTP 失败时
+		// ★ 对账防重复：Lighter modify 等价于原子 cancel+place，HTTP 失败时
 		// 交易所端可能已成功。盲目降级 cancel+create 会产生重复 TP（数量价格相同）。
 		// 通过查询真实状态判断：
 		//   - liveID != oldTPID：modify 实际成功（新 TP 已在），只同步本地状态，跳过 create

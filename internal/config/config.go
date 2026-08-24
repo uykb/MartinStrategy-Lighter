@@ -2,10 +2,10 @@
 // 支持 YAML 文件 + 环境变量覆盖（前缀 MARTIN_）。
 //
 // 重构说明：
-//   - ExchangeConfig 新增 Hyperliquid 专属字段
-//   - ApiKey 字段复用为 Agent 钱包私钥
-//   - ApiSecret 字段复用为主钱包地址
-//   - Symbol 字段不再带 USDT 后缀（Hyperliquid 使用 "HYPE" 而非 "HYPEUSDT"）
+//   - ExchangeConfig 已适配为 Lighter 字段
+//   - ApiKey 字段复用为 Lighter API key private key
+//   - ApiSecret 字段复用为 Lighter Account Index 或 L1 Wallet Address
+//   - Symbol 字段采用 Lighter 的 Symbol 命名（如 "ETH"）
 package config
 
 import (
@@ -26,15 +26,15 @@ type Config struct {
 
 // ExchangeConfig 交易所配置
 //
-// Hyperliquid 适配说明：
-//   - api_key:     存储 Agent 钱包私钥（十六进制，不含 0x 前缀）
-//   - api_secret:  存储主钱包地址（十六进制，含 0x 前缀）
-//   - symbol:      交易对名称（如 "HYPE"，不带 USDT 后缀）
-//   - use_testnet: 是否使用 Hyperliquid 测试网
+// Lighter 适配说明：
+//   - api_key:     Lighter API Key 的私钥（Hex 格式）
+//   - api_secret:  Lighter Account Index 或 L1 钱包地址（Hex 格式，含 0x 前缀）
+//   - symbol:      交易对名称（如 "ETH"）
+//   - use_testnet: 是否使用 Lighter 测试网
 type ExchangeConfig struct {
-	ApiKey     string `mapstructure:"api_key"`     // Agent 钱包私钥
-	ApiSecret  string `mapstructure:"api_secret"`  // 主钱包地址
-	Symbol     string `mapstructure:"symbol"`      // 交易对（如 "HYPE"）
+	ApiKey     string `mapstructure:"api_key"`     // Lighter API key private key
+	ApiSecret  string `mapstructure:"api_secret"`  // Lighter Account Index 或 L1 Wallet Address
+	Symbol     string `mapstructure:"symbol"`      // 交易对（如 "ETH"）
 	UseTestnet bool   `mapstructure:"use_testnet"` // 是否使用测试网
 }
 

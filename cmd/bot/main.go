@@ -1,7 +1,7 @@
 // Package main 是马丁格尔策略交易机器人的入口。
 //
 // 重构说明：
-//   - 交易所适配器由 BinanceClient 替换为 HyperliquidAdapter
+//   - 交易所适配器由旧的适配器替换为 LighterAdapter
 //   - 价格获取由定时轮询升级为 WebSocket 为主、REST 为辅
 //   - 事件总线架构保持不变，FSM 状态机完全透明
 //   - 带缓冲的 Channel 架构确保高频行情推送不阻塞网络 I/O
@@ -26,10 +26,10 @@ func main() {
 	// ---------------------------------------------------------------
 	// 1. 加载配置
 	// ---------------------------------------------------------------
-	// 配置文件 config.yaml 中的字段已适配 Hyperliquid：
-	//   - api_key:     Agent 钱包私钥
-	//   - api_secret:  主钱包地址
-	//   - symbol:      交易对名称（如 "HYPE"，不带 USDT 后缀）
+	// 配置文件 config.yaml 中的字段已适配 Lighter：
+	//   - api_key:     Lighter API Key 的私钥（Hex 格式）
+	//   - api_secret:  Lighter Account Index 或 L1 钱包地址（Hex 格式，含 0x 前缀）
+	//   - symbol:      交易对名称（如 "ETH"）
 	cfg, err := config.LoadConfig("config.yaml")
 	if err != nil {
 		panic(err)
@@ -60,7 +60,7 @@ func main() {
 	// ---------------------------------------------------------------
 	// 5. 创建 Lighter 适配器
 	// ---------------------------------------------------------------
-	// ★ 核心重构：由 HyperliquidAdapter 替换为 LighterAdapter
+	// ★ 核心重构：由先前交易所适配器替换为 LighterAdapter
 	// LighterAdapter 内部管理：
 	//   - REST API 客户端（下单、查询持仓/余额/K线）
 	//   - WebSocket 管理器（双通道订阅 + 三层稳定性防线）
