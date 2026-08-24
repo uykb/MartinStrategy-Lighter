@@ -94,18 +94,3 @@ func parseFloat(s string) (float64, error) {
 	s = strings.TrimSpace(s)
 	return strconv.ParseFloat(s, 64)
 }
-
-// CalcMaxPriceDecimals 根据 szDecimals 计算 Hyperliquid 允许的最大价格小数位数。
-// 公式：maxDecimals = MAX_DECIMALS - szDecimals
-// 其中 MAX_DECIMALS 对永续合约为 6，对现货为 8。
-func CalcMaxPriceDecimals(szDecimals int, isSpot bool) int {
-	maxDecimals := 6
-	if isSpot {
-		maxDecimals = 8
-	}
-	result := maxDecimals - szDecimals
-	if result < 0 {
-		result = 0
-	}
-	return result
-}

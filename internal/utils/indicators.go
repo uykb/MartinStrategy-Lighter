@@ -4,14 +4,6 @@ import (
 	"math"
 )
 
-// Convert float64 slice to precision for orders
-// 注意：此函数使用四舍五入，仅适用于价格等非数量字段。
-// 数量（Size）计算请使用 FloorToDecimals。
-func ToFixed(num float64, precision int) float64 {
-	output := math.Pow(10, float64(precision))
-	return math.Round(num*output) / output
-}
-
 // FloorToDecimals 将数量向下取整到指定小数位数（Floor truncation）。
 //
 // 用于所有 HYPE 代币数量（Size）的计算，确保：
@@ -32,7 +24,7 @@ func FloorToDecimals(num float64, precision int) float64 {
 
 // FloorToTickSize 将数量向下取整到 tickSize 的整数倍。
 //
-// 与 RoundUpToTickSize 不同，本函数严格向下取整，适用于数量计算。
+// 与 RoundUpToTickSize 不同，本函数严格向下取整，适用于数量计算格式。
 // 示例：FloorToTickSize(0.1666, 0.01) → 0.16（而非 0.17）
 func FloorToTickSize(num float64, tickSize float64) float64 {
 	if tickSize == 0 {
