@@ -1,22 +1,21 @@
-# MartinStrategy-Hype
+# MartinStrategy-Lighter
 
-A production-hardened, event-driven Martingale perpetual futures trading bot for **Hyperliquid**, built in pure Go with zero CGO dependencies.
+A production-hardened, event-driven Martingale perpetual futures trading bot for **Lighter Exchange**, built in pure Go.
 
 ## Overview
 
-MartinStrategy-Hype implements a Martingale grid strategy using an **Event-Driven Finite State Machine (ED-FSM)** architecture optimized for 24/7 unattended operation. It trades Hyperliquid perpetual contracts via WebSocket market data with REST API fallback.
+MartinStrategy-Lighter implements a Martingale grid strategy using an **Event-Driven Finite State Machine (ED-FSM)** architecture optimized for 24/7 unattended operation. It trades Lighter perpetual contracts via WebSocket market data with REST API fallback.
 
 **Key design principles:**
-
 - **Go-native concurrency** — zero CGO, pure Go; WebSocket-primary with REST degradation
 - **ED-FSM architecture** — strictly sequential FSM transitions eliminate race conditions
 - **Three-layer connection stability** — active heartbeat → exponential-backoff reconnect → REST resync with FSM freeze
-- **Deep Hyperliquid integration** — USDC settlement, 5-significant-figure price truncation, Agent wallet EIP-712 signing, unified account balance queries
+- **Lighter Integration** — USDC settlement, dynamic size and price precision via API, off-chain transaction signing (Schnorr/Goldilocks) using the Go SDK, SkipNonce validation mode.
 
 ## Architecture
 
 ```
-                          Hyperliquid Exchange
+                             Lighter Exchange
                          ┌─────────────────────┐
                          │  REST API  │  WS API │
                          └─────┬──────┴───┬────┘
@@ -37,8 +36,8 @@ MartinStrategy-Hype implements a Martingale grid strategy using an **Event-Drive
                ┌────────────┤         │ │ Dual Channel  │ │
                │ Skip REST  │         │ │ ──────────── │ │
                │ when WS up │         │ │ priceEventCh │ │
-               └────────────┘         │ │ orderEventCh │ │
-                                      │ └──────┬───────┘ │
+               │            │         │ │ orderEventCh │ │
+               └────────────┘         │ └──────┬───────┘ │
                                       └────────┼─────────┘
                                                │
                                ┌───────────────┼───────────────┐
@@ -74,8 +73,8 @@ MartinStrategy-Hype implements a Martingale grid strategy using an **Event-Drive
 ### Prerequisites
 
 - **Go 1.25+**
-- A Hyperliquid account (unified or standard)
-- Agent wallet private key + main wallet address
+- A Lighter account (master or sub-account)
+- API Key Private Key + Account Index (or L1 Wallet Address)
 
 ### Configuration
 
@@ -84,9 +83,9 @@ Use environment variables (recommended for production) or `config.yaml`.
 **Via environment variables:**
 
 ```bash
-export MARTIN_EXCHANGE_API_KEY="your_agent_private_key_64_hex_no_0x"
-export MARTIN_EXCHANGE_API_SECRET="0xyour_main_wallet_address"
-export MARTIN_EXCHANGE_SYMBOL="HYPE"
+export MARTIN_EXCHANGE_API_KEY="your_lighter_api_key_private_hex"
+export MARTIN_EXCHANGE_API_SECRET="your_account_index_or_wallet_address"
+export MARTIN_EXCHANGE_SYMBOL="ETH"
 export MARTIN_EXCHANGE_USE_TESTNET="true"   # testnet first!
 export MARTIN_LOG_LEVEL="info"
 ```
@@ -95,17 +94,14 @@ export MARTIN_LOG_LEVEL="info"
 
 ```yaml
 exchange:
-  api_key: ""              # Agent wallet private key (64 hex, no 0x)
-  api_secret: ""           # Main wallet address (with 0x prefix)
-  symbol: "HYPE"           # Trading pair (no USDT suffix)
+  api_key: ""              # Lighter API private key (hex string)
+  api_secret: ""           # Lighter Account Index (e.g. 12345) or L1 Wallet Address (hex with 0x)
+  symbol: "ETH"            # Trading pair (e.g. ETH, BTC)
   use_testnet: false
 
 strategy:
   max_safety_orders: 9
   base_ratio: 0.05         # % of balance per base order
-
-storage:
-  sqlite_path: "data/bot.db"
 
 log:
   level: "info"
@@ -123,9 +119,9 @@ go mod tidy
 # Build binary
 go build -o bot cmd/bot/main.go
 
-# Run (pass credentials via env vars)
-export MARTIN_EXCHANGE_API_KEY="your_agent_private_key"
-export MARTIN_EXCHANGE_API_SECRET="0xyour_main_wallet_address"
+# Run
+export MARTIN_EXCHANGE_API_KEY="your_api_key"
+export MARTIN_EXCHANGE_API_SECRET="your_account_index"
 ./bot
 ```
 
@@ -140,7 +136,7 @@ curl http://localhost:8080/readyz    # readiness (WS active + FSM not frozen = 2
 
 ### Core Trading Logic
 
-1. **Entry** — When IDLE and a tick arrives, place an IOC limit buy at +5% of market price to simulate a market order for instant fill.
+1. **Entry** — When IDLE and a tick arrives, place a market buy order (using IOC limit order with price protection offset at +5% of market price) for instant fill.
 2. **Grid deployment** — After the base order fills, place 9 limit buy orders below the entry price using fixed percentage steps.
 3. **Dynamic take-profit** — A single TP sell order always covers the full on-chain position size. TP price = entry price × 1.008 (+0.80%).
 4. **Safety-order sync** — Every time a grid order fills, the bot re-fetches the on-chain position and updates both TP quantity and price.
@@ -208,8 +204,8 @@ Base order = `balance × 6%`, minimum $10 USDC. Safety order sizing is configure
 
 ### Take-Profit
 
-- **Size**: `FloorToDecimals(|position.Size|, szDecimals)` — always equals the full on-chain position.
-- **Price**: `entryPrice × 1.008` (+0.80%), truncated to 5 significant figures.
+- **Size**: `FloorToDecimals(|position.Size|, sizeDecimals)` — always equals the full on-chain position.
+- **Price**: `entryPrice × 1.008` (+0.80%), formatted to Lighter price decimals.
 - **Update**: triggered every time a safety order fills.
 - **Replacement**: prefers `ModifyOrder` (atomic) and falls back to cancel + create on failure.
 
@@ -229,122 +225,28 @@ All token quantity calculations strictly use **floor truncation** to prevent ins
 
 | Function | Purpose | Example |
 |----------|---------|---------|
-| `FloorToDecimals(qty, 2)` | Truncate to `szDecimals` | 0.666 → 0.66 |
-| `FloorToTickSize(qty, 0.01)` | Align to tick size | 0.1666 → 0.16 |
+| `FloorToDecimals(qty, decimals)` | Truncate to size decimals | 0.6666 → 0.666 (for 3 decimals) |
+| `FloorToTickSize(qty, tick)` | Align to tick size | 0.1666 → 0.16 |
 
 When floor truncation drops the order value below $10, the bot automatically bumps it by one `stepSize`.
 
 ## Exchange Integration
 
-### Unified Account Balance
-
-Hyperliquid unified accounts hold USDC in the spot account. `GetBalance()` queries both perp and spot balances and returns the maximum:
-
-```
-perp_balance:     0.00
-spot_usdc:    1,185.21
-used:         1,185.21   (takes the max)
-```
-
-### 5-Significant-Figure Price Truncation
-
-Hyperliquid requires all order prices to have at most 5 significant figures and at most `(6 − szDecimals)` decimal places:
-
-```
-102.3456 → 102.35       (5 sig figs, 2 max decimals)
-0.00123456 → 0.0012346  (5 sig figs, 6 max decimals)
-100000 → 100000         (integers always valid)
-```
+### Nonce & Transaction attributes
+To avoid concurrent nonce collisions when placing multiple grid orders simultaneously, the Lighter adapter uses **SkipNonce** validation. The transaction nonce is computed using microsecond timestamps.
 
 ### Market Order Simulation
-
-Hyperliquid has no native market orders. The bot uses IOC limit orders with a 5% price offset to guarantee immediate execution:
-
-```go
-// Market buy: set price far above current to ensure fill
-req.Price = price * 1.05  // 5% above best bid
-```
-
-### Agent Wallet Signing
-
-Only the Agent private key is used for L1 signing; the main wallet private key remains secure.
-
-## Production-Stability Features
-
-### 1. Strictly Sequential FSM Execution
-
-EventBus handlers execute synchronously in strict order. Each handler is wrapped in `defer recover()`. A single handler's panic never affects other handlers or the main loop.
-
-### 2. Three-Layer WebSocket Stability
-
-| Layer | Mechanism | Parameters |
-|-------|-----------|------------|
-| 1 | Active heartbeat | 30s ping interval, 10s pong timeout |
-| 2 | Reconnect + exponential backoff | Max 10 attempts, 2s initial, 60s cap |
-| 3 | REST resync with FSM freeze | Freeze FSM → fetch position → calibrate TP → delayed unfreeze (2s) |
-
-### 3. Historical Fill Filtering
-
-- **On startup**: `initialSyncDone` flag prevents processing FILL events for 3 seconds after state sync.
-- **On reconnect**: `frozen` flag remains set for 2 seconds after resync, giving the WebSocket time to drain replayed events.
-- **REST resync**: No longer replays historical fills; only publishes position updates for TP calibration.
-
-### 4. Stale Price Discard
-
-`PriceUpdate.IsStale(2s)` drops any tick older than 2 seconds to prevent slippage.
-
-### 5. Order Retries
-
-`placeOrderWithRetry` uses 3 attempts with jittered exponential backoff: `200ms → 400ms → 800ms`.
-
-### 6. Goroutine Panic Self-Healing
-
-Every long-running goroutine has `defer recover()` + 5-second self-healing restart.
-
-## Directory Structure
-
-```
-.
-├── cmd/bot/main.go                    # Entry point
-├── internal/
-│   ├── config/config.go               # Viper config (YAML + env vars)
-│   ├── core/event_bus.go              # Sequential event bus with self-healing
-│   ├── exchange/
-│   │   ├── adapter.go                 # ExchangeAdapter interface + domain models
-│   │   ├── hyperliquid.go             # Hyperliquid adapter (REST + unified balance)
-│   │   └── ws_manager.go              # WSManager (3-layer stability, dual channel)
-│   ├── health/health.go               # HTTP health endpoints
-│   ├── strategy/strategy.go           # Martingale FSM
-│   ├── storage/storage.go             # SQLite + optional Redis
-│   └── utils/
-│       ├── indicators.go              # FloorToDecimals, FloorToTickSize
-│       ├── logger.go                  # Zap structured logging
-│       └── price_rounder.go           # 5 sig-fig price truncation
-├── go.mod
-├── config.yaml
-└── AGENTS.md
-```
+Lighter does not support native market orders on matching engine. They are simulated using IOC (Immediate-Or-Cancel) limit orders with a 5% protection boundary.
 
 ## Tech Stack
 
 | Component | Library |
 |-----------|---------|
 | Language | Go 1.25+ |
-| Exchange SDK | go-hyperliquid |
+| Exchange SDK | github.com/elliottech/lighter-go |
 | WebSocket | gorilla/websocket |
-| Signing | ethereum/go-ethereum |
-| Storage | SQLite (GORM) |
-| Locking | Redis (go-redis) — optional |
 | Config | Viper |
 | Logging | Zap |
-
-## Risk Warning
-
-- Martingale strategies carry extreme risk in sustained downtrends and may lead to significant losses.
-- Use a stop-loss or limit the maximum number of grid levels.
-- Keep your Agent wallet private key secure; always use environment variables in production.
-- **Strongly recommended: test on testnet first** (`use_testnet: true`).
-- This software is for educational and research purposes only. It does not constitute investment advice. Use at your own risk.
 
 ## License
 

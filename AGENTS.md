@@ -21,15 +21,15 @@ go run cmd/bot/main.go
 - **Goroutine Liveness**: All background goroutines must run inside a `defer recover()` wrapper with a 5-second sleep before self-healing restart.
 - **Thread-safe Flags**: Cross-goroutine flags (`frozen`, `tpDirty`, `initialSyncDone`) must be managed via `atomic.Bool`.
 
-## Hyperliquid API Quirks & Limits
-- **Price Precision Rules**: Price must not exceed 5 significant figures AND max `(6 - szDecimals)` decimals. Use `RoundToSigFigs(price, 5, maxPriceDecimals)`.
+## Lighter API Quirks & Limits
+- **Price Precision Rules**: Price must align to the market's `supported_price_decimals` and size to `supported_size_decimals` as retrieved from `/api/v1/orderBooks`.
 - **Epsilon Quantity Flooring**: To counter IEEE 754 float inaccuracies (e.g. 2.53 stored as 2.529999...), add a small epsilon (`+0.00000001`) before calling `FloorToTickSize` or `FloorToDecimals` on quantities.
-- **MinNotional Protection**: Hyperliquid has a ~$10 USDC order minimum. If a floor-truncated order size falls below `MinNotional`, bump it by adding exactly one `stepSize`.
-- **Market Order Simulation**: Hyperliquid lacks native market orders; simulate them via IOC limit orders at `price * 1.05` for BUYs, or `price * 0.95` for SELLs.
-- **USDC Balance Queries**: Accounts with unified margin keep funds in the Spot balance. `GetBalance()` queries both perp and spot USDC balances and returns the maximum.
+- **MinNotional Protection**: If a floor-truncated order size falls below the minimum required USD value, bump it by adding exactly one `stepSize`.
+- **Market Order Simulation**: Lighter lacks native market orders; simulate them via IOC limit orders at `price * 1.05` for BUYs, or `price * 0.95` for SELLs.
+- **SkipNonce & Nonce Management**: Setting `SkipNonce=1` and using microsecond timestamps as nonces prevents parallel ordering conflicts.
 
 ## FSM & Take Profit (TP) Rules
-- **Take Profit Markup**: TP price is a fixed +0.80% (`entryPrice * 1.008`) rounded to 5 sig figs.
+- **Take Profit Markup**: TP price is a fixed +0.80% (`entryPrice * 1.008`) rounded to price decimals.
 - **TP Anti-Chasing (防追价)**: Skip modifying or recreating TP if `tpPrice <= marketPrice`. This prevents restart/reconnect events from immediately filling a recreated TP limit order at market.
 - **ReduceOnly**: All TP orders are SELL LIMIT orders and must enforce `ReduceOnly` to prevent opening unintended reverse positions.
 - **TP Update Priority**: Prefer `ModifyOrder` (atomic cancel/replace). On failure, query the real exchange state using `findLiveTP()` to determine if the order actually succeeded on the exchange before attempting a manual cancel + create.
