@@ -5,7 +5,7 @@
 //   - ExchangeConfig 已适配为 Lighter 字段
 //   - ApiKey 字段复用为 Lighter API key private key
 //   - ApiSecret 字段复用为 Lighter Account Index 或 L1 Wallet Address
-//   - Symbol 字段采用 Lighter 的 Symbol 命名（如 "ETH"）
+//   - Symbol 字段采用 Lighter 的 Symbol 命名（如 "HYPE"）
 package config
 
 import (

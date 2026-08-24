@@ -1059,6 +1059,7 @@ func getFallbackMarketIndex(symbol string) (uint16, error) {
 		"BTC":  1,
 		"SOL":  2,
 		"DOGE": 3,
+		"HYPE": 4,
 		"AVAX": 9,
 		"XRP":  7,
 		"LINK": 8,
