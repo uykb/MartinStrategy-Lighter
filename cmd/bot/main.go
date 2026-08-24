@@ -29,7 +29,7 @@ func main() {
 	// 配置文件 config.yaml 中的字段已适配 Lighter：
 	//   - api_key:     Lighter API Key 的私钥（Hex 格式）
 	//   - api_secret:  Lighter Account Index 或 L1 钱包地址（Hex 格式，含 0x 前缀）
-	//   - symbol:      交易对名称（如 "ETH"）
+	//   - symbol:      交易对名称（固定为 "HYPE"）
 	cfg, err := config.LoadConfig("config.yaml")
 	if err != nil {
 		panic(err)

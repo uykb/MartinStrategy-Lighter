@@ -85,7 +85,7 @@ Use environment variables (recommended for production) or `config.yaml`.
 ```bash
 export MARTIN_EXCHANGE_API_KEY="your_lighter_api_key_private_hex"
 export MARTIN_EXCHANGE_API_SECRET="your_account_index_or_wallet_address"
-export MARTIN_EXCHANGE_SYMBOL="ETH"
+export MARTIN_EXCHANGE_SYMBOL="HYPE"        # 固定为 HYPE
 export MARTIN_EXCHANGE_USE_TESTNET="true"   # testnet first!
 export MARTIN_LOG_LEVEL="info"
 ```
@@ -96,7 +96,7 @@ export MARTIN_LOG_LEVEL="info"
 exchange:
   api_key: ""              # Lighter API private key (hex string)
   api_secret: ""           # Lighter Account Index (e.g. 12345) or L1 Wallet Address (hex with 0x)
-  symbol: "ETH"            # Trading pair (e.g. ETH, BTC)
+  symbol: "HYPE"           # 交易对（固定为 HYPE）
   use_testnet: false
 
 strategy:

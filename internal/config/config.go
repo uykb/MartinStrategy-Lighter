@@ -29,12 +29,12 @@ type Config struct {
 // Lighter 适配说明：
 //   - api_key:     Lighter API Key 的私钥（Hex 格式）
 //   - api_secret:  Lighter Account Index 或 L1 钱包地址（Hex 格式，含 0x 前缀）
-//   - symbol:      交易对名称（如 "ETH"）
+//   - symbol:      交易对名称（固定为 "HYPE"）
 //   - use_testnet: 是否使用 Lighter 测试网
 type ExchangeConfig struct {
 	ApiKey     string `mapstructure:"api_key"`     // Lighter API key private key
 	ApiSecret  string `mapstructure:"api_secret"`  // Lighter Account Index 或 L1 Wallet Address
-	Symbol     string `mapstructure:"symbol"`      // 交易对（如 "ETH"）
+	Symbol     string `mapstructure:"symbol"`      // 交易对（固定为 "HYPE"）
 	UseTestnet bool   `mapstructure:"use_testnet"` // 是否使用测试网
 }
 

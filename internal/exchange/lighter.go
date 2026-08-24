@@ -1054,23 +1054,10 @@ type MarketInfo struct {
 
 // getFallbackMarketIndex 提供硬编码备用 ID
 func getFallbackMarketIndex(symbol string) (uint16, error) {
-	fallbackMap := map[string]uint16{
-		"ETH":  0,
-		"BTC":  1,
-		"SOL":  2,
-		"DOGE": 3,
-		"HYPE": 4,
-		"AVAX": 9,
-		"XRP":  7,
-		"LINK": 8,
-		"SUI":  16,
-		"BNB":  25,
+	if symbol == "HYPE" {
+		return 4, nil
 	}
-
-	if index, ok := fallbackMap[symbol]; ok {
-		return index, nil
-	}
-	return 0, fmt.Errorf("fallback market not found for %s", symbol)
+	return 0, fmt.Errorf("fallback market not found for %s (HYPE is the only supported market)", symbol)
 }
 
 // normalizeSymbol 标准化符号为 Lighter Perp 命名习惯
