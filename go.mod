@@ -3,6 +3,7 @@ module github.com/uykb/MartinStrategy
 go 1.25.4
 
 require (
+	github.com/alecthomas/kong v1.16.1
 	github.com/elliottech/lighter-go v1.0.9-0.20260820133822-10278d91b1c6
 	github.com/gorilla/websocket v1.5.3
 	github.com/spf13/viper v1.21.0

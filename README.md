@@ -11,6 +11,7 @@ MartinStrategy-Lighter implements a Martingale grid strategy using an **Event-Dr
 - **ED-FSM architecture** — strictly sequential FSM transitions eliminate race conditions
 - **Three-layer connection stability** — active heartbeat → exponential-backoff reconnect → REST resync with FSM freeze
 - **Lighter Integration** — USDC settlement, dynamic size and price precision via API, off-chain transaction signing (Schnorr/Goldilocks) using the Go SDK, SkipNonce validation mode.
+- **Container-Ready Configuration** — parameter parsing powered by `kong`, supporting both environment variables and direct command-line arguments (Flags) for easy deployment using `ko` or traditional Docker setups.
 
 ## Architecture
 
@@ -61,7 +62,7 @@ MartinStrategy-Lighter implements a Martingale grid strategy using an **Event-Dr
                      │      └─── TP fill / manual close ──────────┘│
                      │                                             │
                      │  ★ frozen — pause during REST resync        │
-                     │  ★ initialSyncDone — filter historical fills│
+                     │  │ initialSyncDone — filter historical fills│
                      │  ★ IsStale(2s) — discard stale prices       │
                      │  ★ 3-retry jittered backoff on orders       │
                      │  ★ FloorToDecimals — floor-quantity safety  │
@@ -78,51 +79,51 @@ MartinStrategy-Lighter implements a Martingale grid strategy using an **Event-Dr
 
 ### Configuration
 
-Use environment variables (recommended for production) or `config.yaml`.
+Parameters can be passed through **environment variables** or as **command-line arguments (Flags)**.
 
-**Via environment variables:**
+| Parameter | Command Flag | Env Variable | Default | Description |
+|-----------|--------------|--------------|---------|-------------|
+| API Key | `--api-key` | `MARTIN_EXCHANGE_API_KEY` | *(Required)* | Lighter API Key private key (hex) |
+| API Secret | `--api-secret` | `MARTIN_EXCHANGE_API_SECRET` | *(Required)* | Lighter Account Index or L1 Wallet Address |
+| Symbol | `--symbol` | `MARTIN_EXCHANGE_SYMBOL` | `HYPE` | Trading pair (fixed to HYPE) |
+| Testnet | `--use-testnet` | `MARTIN_EXCHANGE_USE_TESTNET` | `false` | Set to true to run on Lighter Testnet |
+| Safety Orders | `--max-safety-orders` | `MARTIN_STRATEGY_MAX_SAFETY_ORDERS` | `9` | Max grid safety orders |
+| Base Ratio | `--base-ratio` | `MARTIN_STRATEGY_BASE_RATIO` | `0.05` | Base order ratio of balance |
+| Log Level | `--log-level` | `MARTIN_LOG_LEVEL` | `info` | Logging level (`debug`, `info`, `warn`, `error`) |
+| Health Addr | `--health-addr` | `MARTIN_HEALTH_ADDR` | `:8080` | Liveness & Readiness check server address |
 
-```bash
-export MARTIN_EXCHANGE_API_KEY="your_lighter_api_key_private_hex"
-export MARTIN_EXCHANGE_API_SECRET="your_account_index_or_wallet_address"
-export MARTIN_EXCHANGE_SYMBOL="HYPE"        # 固定为 HYPE
-export MARTIN_EXCHANGE_USE_TESTNET="true"   # testnet first!
-export MARTIN_LOG_LEVEL="info"
-```
-
-**Via `config.yaml`:**
-
-```yaml
-exchange:
-  api_key: ""              # Lighter API private key (hex string)
-  api_secret: ""           # Lighter Account Index (e.g. 12345) or L1 Wallet Address (hex with 0x)
-  symbol: "HYPE"           # 交易对（固定为 HYPE）
-  use_testnet: false
-
-strategy:
-  max_safety_orders: 9
-  base_ratio: 0.05         # % of balance per base order
-
-log:
-  level: "info"
-
-health:
-  addr: ":8080"
-```
-
-### Build & Run
+### Build & Run (Binary)
 
 ```bash
-# Install dependencies
+# Install dependencies & tidy modules
 go mod tidy
 
 # Build binary
 go build -o bot cmd/bot/main.go
 
-# Run
-export MARTIN_EXCHANGE_API_KEY="your_api_key"
-export MARTIN_EXCHANGE_API_SECRET="your_account_index"
+# Option A: Run using Command Flags
+./bot --api-key="YOUR_HEX_API_KEY" --api-secret="YOUR_ACCOUNT_INDEX" --use-testnet
+
+# Option B: Run using Environment Variables
+export MARTIN_EXCHANGE_API_KEY="YOUR_HEX_API_KEY"
+export MARTIN_EXCHANGE_API_SECRET="YOUR_ACCOUNT_INDEX"
+export MARTIN_EXCHANGE_USE_TESTNET="true"
 ./bot
+```
+
+### Containerization with `ko`
+
+You can compile and containerize the bot into a clean, minimal image using `ko`:
+
+```bash
+# Build and load image into local Docker daemon
+ko build --local ./cmd/bot
+
+# Run container with Flags
+docker run --rm ko.local/bot:latest --api-key="YOUR_HEX_API_KEY" --api-secret="YOUR_ACCOUNT_INDEX"
+
+# Run container with Environment Variables
+docker run --rm -e MARTIN_EXCHANGE_API_KEY="YOUR_HEX_API_KEY" -e MARTIN_EXCHANGE_API_SECRET="YOUR_ACCOUNT_INDEX" ko.local/bot:latest
 ```
 
 ### Health Checks
@@ -243,9 +244,9 @@ Lighter does not support native market orders on matching engine. They are simul
 | Component | Library |
 |-----------|---------|
 | Language | Go 1.25+ |
+| Parameter Parser | github.com/alecthomas/kong |
 | Exchange SDK | github.com/elliottech/lighter-go |
 | WebSocket | gorilla/websocket |
-| Config | Viper |
 | Logging | Zap |
 
 ## License

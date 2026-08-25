@@ -5,12 +5,15 @@
 # Build binary
 go build -o bot ./cmd/bot/
 
+# Build container image with ko
+ko build --local ./cmd/bot
+
 # Code checks
 go vet ./...
 go fmt ./...
 
-# Run locally
-go run cmd/bot/main.go
+# Run locally with flags
+go run cmd/bot/main.go --api-key="YOUR_KEY" --api-secret="YOUR_SECRET"
 ```
 *Note on testing: No `_test.go` files exist yet. When adding new features, write table-driven tests alongside the source and mock exchange/storage clients.*
 
