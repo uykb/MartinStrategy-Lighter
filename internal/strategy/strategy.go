@@ -45,6 +45,11 @@ const MinOrderValue = 10.0
 // MaxTickStaleness 行情最大允许延迟（超过此时间的行情视为过期，丢弃不处理）
 const MaxTickStaleness = 2 * time.Second
 
+// entryCooldownDuration 入场失败后的冷却期。
+// 防止失败后每个 Tick 都立即重试，打穿交易所速率限制并触发 AWS WAF 60 秒封禁。
+// Standard 账户 REST 上限为 60 加权请求/分钟，此处取 30 秒保证有足够的重试空间。
+const entryCooldownDuration = 30 * time.Second
+
 // ---------------------------------------------------------------------------
 // MartingaleStrategy 核心结构
 // ---------------------------------------------------------------------------
@@ -98,6 +103,10 @@ type MartingaleStrategy struct {
 	// 异步撤单/重置任务捕获发起时的 cycleID，执行前检查代际是否已变化，
 	// 防止上一周期的异步 CancelAllOrders 误撤新周期的网格单/TP。
 	cycleID uint64
+
+	// ★ 入场冷却：enterLong 失败后进入冷却期，避免每个 Tick 都重试下单，
+	// 打穿交易所速率限制并触发 WAF 60 秒封禁。nextEntryTime 之后才允许再次入场。
+	nextEntryTime time.Time
 
 	// ★ P2 加固：对账冻结标志（atomic，对账期间 FSM 暂停处理 tick 和 orderUpdate）
 	frozen atomic.Bool
@@ -408,6 +417,15 @@ func (s *MartingaleStrategy) handleTick(ctx context.Context, event core.Event) e
 		s.mu.Unlock()
 		return nil
 	}
+
+	// ★ 入场冷却：上次入场失败后需等待冷却期结束，防止高频重试触发 WAF
+	if time.Now().Before(s.nextEntryTime) {
+		s.mu.Unlock()
+		utils.Logger.Debug("入场冷却中，跳过 Tick",
+			zap.Time("next_entry", s.nextEntryTime))
+		return nil
+	}
+
 	utils.Logger.Info("状态为 IDLE，启动入场序列")
 	s.currentState = StatePlacingGrid
 	s.gridPlaced = false
@@ -423,11 +441,15 @@ func (s *MartingaleStrategy) handleTick(ctx context.Context, event core.Event) e
 
 	// 网络请求在锁外执行
 	if err := s.enterLong(price); err != nil {
-		// 下单失败，恢复状态
+		// 下单失败，恢复状态并进入冷却期（避免每个 Tick 都重试打穿限频）
 		s.mu.Lock()
 		s.currentState = StateIdle
+		s.nextEntryTime = time.Now().Add(entryCooldownDuration)
 		s.mu.Unlock()
-		utils.Logger.Error("enterLong 失败，重置为 IDLE", zap.Error(err))
+		utils.Logger.Error("enterLong 失败，重置为 IDLE 并进入冷却",
+			zap.Duration("cooldown", entryCooldownDuration),
+			zap.Time("next_entry", s.nextEntryTime),
+			zap.Error(err))
 		return err
 	}
 
