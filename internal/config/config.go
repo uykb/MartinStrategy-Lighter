@@ -32,10 +32,11 @@ type Config struct {
 //   - symbol:      交易对名称（固定为 "HYPE"）
 //   - use_testnet: 是否使用 Lighter 测试网
 type ExchangeConfig struct {
-	ApiKey     string `mapstructure:"api_key"`     // Lighter API key private key
-	ApiSecret  string `mapstructure:"api_secret"`  // Lighter Account Index 或 L1 Wallet Address
-	Symbol     string `mapstructure:"symbol"`      // 交易对（固定为 "HYPE"）
-	UseTestnet bool   `mapstructure:"use_testnet"` // 是否使用测试网
+	ApiKey      string `mapstructure:"api_key"`       // Lighter API key private key
+	ApiSecret   string `mapstructure:"api_secret"`    // Lighter Account Index 或 L1 Wallet Address
+	ApiKeyIndex uint8  `mapstructure:"api_key_index"` // Lighter API Key Index (通常为 2-254)
+	Symbol      string `mapstructure:"symbol"`        // 交易对（固定为 "HYPE"）
+	UseTestnet  bool   `mapstructure:"use_testnet"`   // 是否使用测试网
 }
 
 // StrategyConfig 策略配置

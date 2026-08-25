@@ -85,6 +85,7 @@ Parameters can be passed through **environment variables** or as **command-line 
 |-----------|--------------|--------------|---------|-------------|
 | API Key | `--api-key` | `MARTIN_EXCHANGE_API_KEY` | *(Required)* | Lighter API Key private key (hex) |
 | API Secret | `--api-secret` | `MARTIN_EXCHANGE_API_SECRET` | *(Required)* | Lighter Account Index or L1 Wallet Address |
+| API Key Index | `--api-key-index` | `MARTIN_EXCHANGE_API_KEY_INDEX` | `2` | Lighter API Key Index (created with API Key) |
 | Testnet | `--use-testnet` | `MARTIN_EXCHANGE_USE_TESTNET` | `false` | Set to true to run on Lighter Testnet |
 | Log Level | `--log-level` | `MARTIN_LOG_LEVEL` | `info` | Logging level (`debug`, `info`, `warn`, `error`) |
 | Health Addr | `--health-addr` | `MARTIN_HEALTH_ADDR` | `:8080` | Liveness & Readiness check server address |

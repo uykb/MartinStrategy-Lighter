@@ -65,7 +65,7 @@ func NewLighterConfig(cfg *config.ExchangeConfig) (*LighterConfig, error) {
 		accountIndex = index
 	}
 
-	var apiKeyIndex uint8 = 2
+	apiKeyIndex := cfg.ApiKeyIndex
 
 	return &LighterConfig{
 		APIURL:         apiURL,
