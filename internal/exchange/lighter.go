@@ -85,7 +85,13 @@ func NewLighterConfig(cfg *config.ExchangeConfig) (*LighterConfig, error) {
 // lookupAccountIndex fetches all accounts for a wallet from the Lighter API and returns the first one
 func lookupAccountIndex(apiURL, walletAddr string) (int64, error) {
 	endpoint := fmt.Sprintf("%s/api/v1/accountsByL1Address?l1_address=%s", apiURL, walletAddr)
-	resp, err := http.Get(endpoint)
+	req, err := http.NewRequest("GET", endpoint, nil)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return 0, err
 	}
@@ -246,6 +252,30 @@ func (l *LighterAdapter) Stop() error {
 	return nil
 }
 
+func (l *LighterAdapter) sendGetRequest(endpoint string) ([]byte, error) {
+	req, err := http.NewRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	
+	resp, err := l.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP error %d: %s", resp.StatusCode, string(body))
+	}
+	return body, nil
+}
+
 // GetLatestPrice 从 REST 获取最新价格
 func (l *LighterAdapter) GetLatestPrice() (float64, error) {
 	marketInfo, err := l.getMarketInfo()
@@ -254,19 +284,9 @@ func (l *LighterAdapter) GetLatestPrice() (float64, error) {
 	}
 
 	endpoint := fmt.Sprintf("%s/api/v1/orderBookDetails?market_id=%d", l.cfg.APIURL, marketInfo.MarketID)
-	resp, err := l.httpClient.Get(endpoint)
+	body, err := l.sendGetRequest(endpoint)
 	if err != nil {
 		return 0, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return 0, err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("HTTP error %d: %s", resp.StatusCode, string(body))
 	}
 
 	var apiResp struct {
@@ -318,13 +338,7 @@ func (l *LighterAdapter) GetKlines(interval string, limit int) ([]Candle, error)
 	endpoint := fmt.Sprintf("%s/api/v1/candles?market_id=%d&resolution=%s&start_timestamp=%d&end_timestamp=%d&count_back=%d",
 		l.cfg.APIURL, marketInfo.MarketID, interval, startTime, endTime, limit)
 
-	resp, err := l.httpClient.Get(endpoint)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
+	body, err := l.sendGetRequest(endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -717,13 +731,7 @@ func (l *LighterAdapter) GetSymbolInfo() (*SymbolInfo, error) {
 // getMarketInfo gets the market configuration details for the symbol
 func (l *LighterAdapter) getMarketInfo() (*MarketInfo, error) {
 	endpoint := fmt.Sprintf("%s/api/v1/orderBooks", l.cfg.APIURL)
-	resp, err := l.httpClient.Get(endpoint)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
+	body, err := l.sendGetRequest(endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -802,13 +810,7 @@ func (l *LighterAdapter) initSymbolInfo() error {
 // getDetailedAccount fetches the Lighter account data
 func (l *LighterAdapter) getDetailedAccount() (*LighterDetailedAccount, error) {
 	endpoint := fmt.Sprintf("%s/api/v1/account?by=index&value=%d", l.cfg.APIURL, l.cfg.AccountIndex)
-	resp, err := l.httpClient.Get(endpoint)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
+	body, err := l.sendGetRequest(endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -859,6 +861,7 @@ func (l *LighterAdapter) getActiveOrdersREST(marketID uint16) ([]wsLighterOrder,
 		return nil, err
 	}
 	req.Header.Set("authorization", token)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
 	resp, err := l.httpClient.Do(req)
 	if err != nil {
@@ -910,13 +913,7 @@ func (l *LighterAdapter) pollForModifiedOrderIndex(txHash string) (int64, error)
 
 	for i := 0; i < 30; i++ {
 		time.Sleep(100 * time.Millisecond)
-		resp, err := l.httpClient.Get(endpoint)
-		if err != nil {
-			continue
-		}
-		defer resp.Body.Close()
-
-		body, err := io.ReadAll(resp.Body)
+		body, err := l.sendGetRequest(endpoint)
 		if err != nil {
 			continue
 		}
@@ -1016,6 +1013,7 @@ func (l *LighterAdapter) submitOrder(txType int, txInfo string) (string, error) 
 	}
 
 	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
+	httpReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
 	resp, err := l.httpClient.Do(httpReq)
 	if err != nil {
