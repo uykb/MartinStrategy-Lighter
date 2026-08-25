@@ -504,13 +504,6 @@ func (l *LighterAdapter) CreateOrder(side OrderSide, orderType OrderTypeKind, qu
 		OrderExpiry:      orderExpiry,
 	}
 
-	utils.Logger.Info("CreateOrder 调试参数",
-		zap.String("side", string(side)),
-		zap.String("type", string(orderType)),
-		zap.Int("type_value", int(orderTypeValue)),
-		zap.Int("time_in_force", int(timeInForce)),
-		zap.Int64("order_expiry", orderExpiry))
-
 	transactOpts := l.getTransactOpts()
 	tx, err := l.txClient.GetCreateOrderTransaction(txReq, transactOpts)
 	if err != nil {
@@ -835,11 +828,7 @@ func (l *LighterAdapter) getDetailedAccount() (*LighterDetailedAccount, error) {
 
 	var acctResp LighterAccountResponse
 	if err := json.Unmarshal(body, &acctResp); err != nil {
-		previewLen := 500
-		if len(body) < previewLen {
-			previewLen = len(body)
-		}
-		return nil, fmt.Errorf("解析账户 JSON 失败, 错误: %w, 响应预览: %s", err, string(body[:previewLen]))
+		return nil, fmt.Errorf("解析账户 JSON 失败: %w", err)
 	}
 
 	if acctResp.Code != 200 {

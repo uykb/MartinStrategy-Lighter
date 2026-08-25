@@ -28,8 +28,11 @@ go run cmd/bot/main.go --api-key="YOUR_KEY" --api-secret="YOUR_SECRET"
 - **Price Precision Rules**: Price must align to the market's `supported_price_decimals` and size to `supported_size_decimals` as retrieved from `/api/v1/orderBooks`.
 - **Epsilon Quantity Flooring**: To counter IEEE 754 float inaccuracies (e.g. 2.53 stored as 2.529999...), add a small epsilon (`+0.00000001`) before calling `FloorToTickSize` or `FloorToDecimals` on quantities.
 - **MinNotional Protection**: If a floor-truncated order size falls below the minimum required USD value, bump it by adding exactly one `stepSize`.
-- **Market Order Simulation**: Lighter lacks native market orders; simulate them via IOC limit orders at `price * 1.05` for BUYs, or `price * 0.95` for SELLs.
-- **SkipNonce & Nonce Management**: Setting `SkipNonce=1` and using microsecond timestamps as nonces prevents parallel ordering conflicts.
+- **Market Order Simulation**: Lighter lacks native market orders; simulate them via IOC limit orders at `price * 1.05` for BUYs, or `price * 0.95` for SELLs. IOC/Market orders MUST carry `order_expiry = 0`, otherwise the SDK rejects them with `OrderExpiry is invalid`.
+- **SkipNonce & Nonce Management**: Set `SkipNonce=1` and use a **millisecond-timestamp** nonce with an atomic CAS counter to guarantee strict monotonic increase. Per official docs the constraint `2^47-1 > new_nonce > old_nonce` must hold — **never use microsecond timestamps** (they exceed `2^47-1` and the exchange rejects them with code `21104 invalid nonce`).
+- **Authentication Required (AWS WAF)**: Lighter's API is behind an AWS WAF bot challenge. Unauthenticated requests from datacenter IPs get a `405 Human Verification` captcha page. Per official docs, authenticate **every** REST request (attach the signed `authorization` header) to bypass IP-based rate limits and move limits to L1-based.
+- **Rate Limits**: Standard REST = 60 requests/min; default transaction type (createOrder) = 40 requests/min; firewall cooldown = 60s static; WS messages = 200/min. Rate-limit errors surface as `HTTP 429`/`405` or API code `23000`. **Entry cooldown after failure is mandatory** (`entryCooldownDuration = 60s`) to stay inside these budgets.
+- **Order Expiry Validation**: Limit orders (GoodTillTime) require a non-zero `order_expiry` between 5 minutes and 30 days; IOC/Market orders require `order_expiry = 0`.
 
 ## FSM & Take Profit (TP) Rules
 - **Take Profit Markup**: TP price is a fixed +0.80% (`entryPrice * 1.008`) rounded to price decimals.

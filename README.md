@@ -232,11 +232,35 @@ When floor truncation drops the order value below $10, the bot automatically bum
 
 ## Exchange Integration
 
-### Nonce & Transaction attributes
-To avoid concurrent nonce collisions when placing multiple grid orders simultaneously, the Lighter adapter uses **SkipNonce** validation. The transaction nonce is computed using microsecond timestamps.
+### Authentication (Bypass AWS WAF)
+Lighter's API is protected by an AWS WAF bot challenge. Datacenter/cloud IPs that send **unauthenticated** requests receive a `405 Human Verification` captcha page. Per [official docs](https://apidocs.lighter.xyz/docs/rate-limits):
+
+> "To bypass IP-based rate limits, clients can authenticate each request so that only L1-based rate limits apply."
+
+The adapter therefore signs an auth token and attaches an `authorization` header to **every** REST request (including read-only queries), which both bypasses the WAF and moves rate limiting from IP-based to L1-based.
+
+### Nonce Management (SkipNonce)
+To avoid concurrent nonce collisions when placing multiple grid orders simultaneously, the Lighter adapter uses **SkipNonce=1** mode. Per official docs, with SkipNonce the constraint `2^47-1 > new_nonce > old_nonce` must hold.
+
+- The nonce is a **millisecond timestamp** (≈1.75e12, well below `2^47-1` ≈ 1.4e14).
+- An **atomic compare-and-swap counter** guarantees strictly increasing nonces even when multiple orders are placed in the same millisecond (e.g. 9 grid levels).
+- ⚠️ Do **not** use microsecond timestamps: they exceed `2^47-1` and the exchange rejects them with error `21104 invalid nonce`.
+
+### Rate Limits & Cooldowns
+Key limits from the [official rate-limits docs](https://apidocs.lighter.xyz/docs/rate-limits):
+
+| Limit | Value |
+|-------|-------|
+| Standard REST API | 60 weighted requests / minute |
+| `sendTx` / `sendTxBatch` (Standard) | 60 / minute (part of the same bucket) |
+| Transaction type limit (default) | 40 requests / minute |
+| Firewall (AWS WAF) cooldown | 60 seconds static |
+| WebSocket messages sent / minute | 200 |
+
+The strategy enforces a **60-second entry cooldown** after any failed entry attempt, guaranteeing at most 1 `createOrder` per minute — far below the 40/min transaction limit and fully inside the firewall cooldown window. Rate-limit errors surface as `HTTP 429` / `HTTP 405` or API code `23000 (Too Many Requests)`.
 
 ### Market Order Simulation
-Lighter does not support native market orders on matching engine. They are simulated using IOC (Immediate-Or-Cancel) limit orders with a 5% protection boundary.
+Lighter does not support native market orders on matching engine. They are simulated using IOC (Immediate-Or-Cancel) limit orders with a 5% protection boundary. IOC market orders must carry `order_expiry = 0`, otherwise the SDK rejects them with `OrderExpiry is invalid`.
 
 ## Tech Stack
 

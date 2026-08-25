@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"strconv"
 	"strings"
 	"sync"
@@ -176,13 +175,8 @@ func (w *WSManager) connect() error {
 		HandshakeTimeout: 10 * time.Second,
 	}
 
-	conn, resp, err := dialer.Dial(w.cfg.WSURL, nil)
+	conn, _, err := dialer.Dial(w.cfg.WSURL, nil)
 	if err != nil {
-		if resp != nil {
-			bodyBytes, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			return fmt.Errorf("WebSocket 拨号失败 (HTTP 状态码: %d, 响应: %s): %w", resp.StatusCode, string(bodyBytes), err)
-		}
 		return fmt.Errorf("WebSocket 拨号失败: %w", err)
 	}
 

@@ -406,7 +406,7 @@ func (s *MartingaleStrategy) handleTick(ctx context.Context, event core.Event) e
 
 	price := priceUpdate.Price
 
-	utils.Logger.Info("收到 Tick",
+	utils.Logger.Debug("收到 Tick",
 		zap.Float64("price", price),
 		zap.String("state", string(s.currentState)),
 		zap.Bool("gridPlaced", s.gridPlaced))
