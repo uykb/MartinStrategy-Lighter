@@ -85,10 +85,7 @@ Parameters can be passed through **environment variables** or as **command-line 
 |-----------|--------------|--------------|---------|-------------|
 | API Key | `--api-key` | `MARTIN_EXCHANGE_API_KEY` | *(Required)* | Lighter API Key private key (hex) |
 | API Secret | `--api-secret` | `MARTIN_EXCHANGE_API_SECRET` | *(Required)* | Lighter Account Index or L1 Wallet Address |
-| Symbol | `--symbol` | `MARTIN_EXCHANGE_SYMBOL` | `HYPE` | Trading pair (fixed to HYPE) |
 | Testnet | `--use-testnet` | `MARTIN_EXCHANGE_USE_TESTNET` | `false` | Set to true to run on Lighter Testnet |
-| Safety Orders | `--max-safety-orders` | `MARTIN_STRATEGY_MAX_SAFETY_ORDERS` | `9` | Max grid safety orders |
-| Base Ratio | `--base-ratio` | `MARTIN_STRATEGY_BASE_RATIO` | `0.05` | Base order ratio of balance |
 | Log Level | `--log-level` | `MARTIN_LOG_LEVEL` | `info` | Logging level (`debug`, `info`, `warn`, `error`) |
 | Health Addr | `--health-addr` | `MARTIN_HEALTH_ADDR` | `:8080` | Liveness & Readiness check server address |
 

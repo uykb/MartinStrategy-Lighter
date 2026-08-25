@@ -24,14 +24,11 @@ import (
 )
 
 type CLI struct {
-	ApiKey          string  `help:"Lighter API Key private key (hex)" env:"MARTIN_EXCHANGE_API_KEY" required:""`
-	ApiSecret       string  `help:"Lighter Account Index or L1 Wallet Address" env:"MARTIN_EXCHANGE_API_SECRET" required:""`
-	Symbol          string  `help:"Trading pair (fixed to HYPE)" env:"MARTIN_EXCHANGE_SYMBOL" default:"HYPE"`
-	UseTestnet      bool    `help:"Use Lighter testnet" env:"MARTIN_EXCHANGE_USE_TESTNET" default:"false"`
-	MaxSafetyOrders int     `help:"Max grid safety orders" env:"MARTIN_STRATEGY_MAX_SAFETY_ORDERS" default:"9"`
-	BaseRatio       float64 `help:"Base order ratio of balance" env:"MARTIN_STRATEGY_BASE_RATIO" default:"0.05"`
-	LogLevel        string  `help:"Log level" env:"MARTIN_LOG_LEVEL" default:"info"`
-	HealthAddr      string  `help:"Health check server address" env:"MARTIN_HEALTH_ADDR" default:":8080"`
+	ApiKey     string `help:"Lighter API Key private key (hex)" env:"MARTIN_EXCHANGE_API_KEY" required:""`
+	ApiSecret  string `help:"Lighter Account Index or L1 Wallet Address" env:"MARTIN_EXCHANGE_API_SECRET" required:""`
+	UseTestnet bool   `help:"Use Lighter testnet" env:"MARTIN_EXCHANGE_USE_TESTNET" default:"false"`
+	LogLevel   string `help:"Log level" env:"MARTIN_LOG_LEVEL" default:"info"`
+	HealthAddr string `help:"Health check server address" env:"MARTIN_HEALTH_ADDR" default:":8080"`
 }
 
 func main() {
@@ -49,12 +46,12 @@ func main() {
 		Exchange: config.ExchangeConfig{
 			ApiKey:     cli.ApiKey,
 			ApiSecret:  cli.ApiSecret,
-			Symbol:     cli.Symbol,
+			Symbol:     "HYPE",
 			UseTestnet: cli.UseTestnet,
 		},
 		Strategy: config.StrategyConfig{
-			MaxSafetyOrders: cli.MaxSafetyOrders,
-			BaseRatio:       cli.BaseRatio,
+			MaxSafetyOrders: 9,
+			BaseRatio:       0.06,
 		},
 		Log: config.LogConfig{
 			Level: cli.LogLevel,
