@@ -493,6 +493,13 @@ func (l *LighterAdapter) CreateOrder(side OrderSide, orderType OrderTypeKind, qu
 		OrderExpiry:      orderExpiry,
 	}
 
+	utils.Logger.Info("CreateOrder 调试参数",
+		zap.String("side", string(side)),
+		zap.String("type", string(orderType)),
+		zap.Int("type_value", int(orderTypeValue)),
+		zap.Int("time_in_force", int(timeInForce)),
+		zap.Int64("order_expiry", orderExpiry))
+
 	transactOpts := l.getTransactOpts()
 	tx, err := l.txClient.GetCreateOrderTransaction(txReq, transactOpts)
 	if err != nil {
