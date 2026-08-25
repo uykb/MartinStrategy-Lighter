@@ -258,7 +258,17 @@ func (l *LighterAdapter) sendGetRequest(endpoint string) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	
+
+	// ★ 官方文档要求：对每个请求进行认证以绕过 IP 速率限制。
+	// "To bypass IP-based rate limits, clients can authenticate each request so that only L1-based rate limits apply."
+	// 无认证的机房 IP 请求会触发 AWS WAF 的 Human Verification 人机验证挑战（HTTP 405）。
+	token, err := l.getAuthToken()
+	if err != nil {
+		utils.Logger.Warn("生成认证 Token 失败，请求将以匿名方式发送", zap.Error(err))
+	} else {
+		req.Header.Set("authorization", token)
+	}
+
 	resp, err := l.httpClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -1025,6 +1035,14 @@ func (l *LighterAdapter) submitOrder(txType int, txInfo string) (string, error) 
 
 	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
 	httpReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+	// ★ 官方文档要求：对每个请求进行认证以绕过 IP 速率限制。
+	// 下单交易必须携带授权头，否则 AWS WAF 会对机房 IP 触发人机验证（HTTP 405）。
+	token, err := l.getAuthToken()
+	if err != nil {
+		return "", fmt.Errorf("生成认证 Token 失败: %w", err)
+	}
+	httpReq.Header.Set("authorization", token)
 
 	resp, err := l.httpClient.Do(httpReq)
 	if err != nil {
