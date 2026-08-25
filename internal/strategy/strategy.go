@@ -46,9 +46,10 @@ const MinOrderValue = 10.0
 const MaxTickStaleness = 2 * time.Second
 
 // entryCooldownDuration 入场失败后的冷却期。
-// 防止失败后每个 Tick 都立即重试，打穿交易所速率限制并触发 AWS WAF 60 秒封禁。
-// Standard 账户 REST 上限为 60 加权请求/分钟，此处取 30 秒保证有足够的重试空间。
-const entryCooldownDuration = 30 * time.Second
+// 防止失败后每个 Tick 都立即重试，打穿交易所速率限制并触发 AWS WAF 封禁。
+// 官方限频：L2CreateOrder 交易类型限制 40 次/分钟；防火墙冷却为 60 秒。
+// 取 60 秒冷却 ⇒ 每分钟最多 1 次入场尝试，远低于所有限频阈值。
+const entryCooldownDuration = 60 * time.Second
 
 // ---------------------------------------------------------------------------
 // MartingaleStrategy 核心结构
