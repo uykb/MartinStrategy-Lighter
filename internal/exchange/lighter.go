@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/elliottech/lighter-go/client"
@@ -852,18 +853,36 @@ func (l *LighterAdapter) getDetailedAccount() (*LighterDetailedAccount, error) {
 	return &acctResp.Accounts[0], nil
 }
 
-// getTransactOpts generates TransactOpts using SkipNonce=1 and unix nanosecond nonce
+// nonceCounter 保证 SkipNonce 模式下 nonce 严格递增。
+// 官方要求：2^47-1 > new_nonce > old_nonce。
+// 使用毫秒时间戳（~1.75e12 < 2^47-1 ≈ 1.4e14）作为基数，
+// 再通过原子 CAS 保证同进程内严格递增。
+var nonceCounter atomic.Int64
+
+// getTransactOpts generates TransactOpts using SkipNonce=1 and a monotonically
+// increasing millisecond-timestamp nonce (must be < 2^47-1 per official docs).
 func (l *LighterAdapter) getTransactOpts() *types.TransactOpts {
 	var skipNonceVal uint8 = 1
-	nonceVal := time.Now().UnixNano() / 1000 // Microsecond timestamp as nonce
+	base := time.Now().UnixMilli()
 
-	return &types.TransactOpts{
-		FromAccountIndex: &l.cfg.AccountIndex,
-		ApiKeyIndex:      &l.cfg.ApiKeyIndex,
-		Nonce:            &nonceVal,
-		TxAttributes: &types.L2TxAttributes{
-			SkipNonce: &skipNonceVal,
-		},
+	// 原子 CAS：确保 nonce 严格递增；若同一毫秒内多次调用，则在上一个值基础上 +1
+	for {
+		prev := nonceCounter.Load()
+		next := base
+		if next <= prev {
+			next = prev + 1
+		}
+		if nonceCounter.CompareAndSwap(prev, next) {
+			nonceVal := next
+			return &types.TransactOpts{
+				FromAccountIndex: &l.cfg.AccountIndex,
+				ApiKeyIndex:      &l.cfg.ApiKeyIndex,
+				Nonce:            &nonceVal,
+				TxAttributes: &types.L2TxAttributes{
+					SkipNonce: &skipNonceVal,
+				},
+			}
+		}
 	}
 }
 
