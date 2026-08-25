@@ -451,7 +451,7 @@ func (l *LighterAdapter) CreateOrder(side OrderSide, orderType OrderTypeKind, qu
 			protectedPrice = price * 0.95
 		}
 		priceValue = uint32(protectedPrice * math.Pow10(marketInfo.PriceDecimals))
-		orderExpiry = time.Now().Add(5 * time.Minute).UnixMilli()
+		orderExpiry = 0 // ImmediateOrCancel / Market orders MUST have OrderExpiry = 0
 	}
 
 	var reduceOnlyValue uint8 = 0
