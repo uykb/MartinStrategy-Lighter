@@ -51,16 +51,16 @@ func NewLighterConfig(cfg *config.ExchangeConfig) (*LighterConfig, error) {
 	}
 
 	var accountIndex int64
-	if strings.HasPrefix(cfg.ApiSecret, "0x") {
-		index, err := lookupAccountIndex(apiURL, cfg.ApiSecret)
+	if strings.HasPrefix(cfg.Account, "0x") {
+		index, err := lookupAccountIndex(apiURL, cfg.Account)
 		if err != nil {
-			return nil, fmt.Errorf("failed to lookup account index for L1 address %s: %w", cfg.ApiSecret, err)
+			return nil, fmt.Errorf("failed to lookup account index for L1 address %s: %w", cfg.Account, err)
 		}
 		accountIndex = index
 	} else {
-		index, err := strconv.ParseInt(cfg.ApiSecret, 10, 64)
+		index, err := strconv.ParseInt(cfg.Account, 10, 64)
 		if err != nil {
-			return nil, fmt.Errorf("invalid api_secret (must be integer account index or hex wallet address): %w", err)
+			return nil, fmt.Errorf("invalid account (must be integer account index or hex wallet address): %w", err)
 		}
 		accountIndex = index
 	}

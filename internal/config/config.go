@@ -27,13 +27,14 @@ type Config struct {
 // ExchangeConfig 交易所配置
 //
 // Lighter 适配说明：
-//   - api_key:     Lighter API Key 的私钥（Hex 格式）
-//   - api_secret:  Lighter Account Index 或 L1 钱包地址（Hex 格式，含 0x 前缀）
-//   - symbol:      交易对名称（固定为 "HYPE"）
-//   - use_testnet: 是否使用 Lighter 测试网
+//   - api_key:       Lighter API Key 的私钥（Hex 格式）
+//   - account:       Lighter Account Index 或 L1 钱包地址（Hex 格式，含 0x 前缀）
+//   - api_key_index: Lighter API Key Index (通常为 2-254)
+//   - symbol:        交易对名称（固定为 "HYPE"）
+//   - use_testnet:   是否使用 Lighter 测试网
 type ExchangeConfig struct {
 	ApiKey      string `mapstructure:"api_key"`       // Lighter API key private key
-	ApiSecret   string `mapstructure:"api_secret"`    // Lighter Account Index 或 L1 Wallet Address
+	Account     string `mapstructure:"account"`       // Lighter Account Index 或 L1 Wallet Address
 	ApiKeyIndex uint8  `mapstructure:"api_key_index"` // Lighter API Key Index (通常为 2-254)
 	Symbol      string `mapstructure:"symbol"`        // 交易对（固定为 "HYPE"）
 	UseTestnet  bool   `mapstructure:"use_testnet"`   // 是否使用测试网
@@ -74,7 +75,8 @@ func LoadConfig(path string) (*Config, error) {
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	// ★ 关键：必须用 BindEnv 显式绑定，AutomaticEnv() 在 Unmarshal 时不生效
 	viper.BindEnv("exchange.api_key")
-	viper.BindEnv("exchange.api_secret")
+	viper.BindEnv("exchange.account")
+	viper.BindEnv("exchange.api_key_index")
 	viper.AutomaticEnv()
 
 	// config.yaml 可选：不存在时不报错，纯靠环境变量 + 默认值

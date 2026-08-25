@@ -84,7 +84,7 @@ Parameters can be passed through **environment variables** or as **command-line 
 | Parameter | Command Flag | Env Variable | Default | Description |
 |-----------|--------------|--------------|---------|-------------|
 | API Key | `--api-key` | `MARTIN_EXCHANGE_API_KEY` | *(Required)* | Lighter API Key private key (hex) |
-| API Secret | `--api-secret` | `MARTIN_EXCHANGE_API_SECRET` | *(Required)* | Lighter Account Index or L1 Wallet Address |
+| Account | `--account` | `MARTIN_EXCHANGE_ACCOUNT` | *(Required)* | Lighter Account Index or L1 Wallet Address |
 | API Key Index | `--api-key-index` | `MARTIN_EXCHANGE_API_KEY_INDEX` | `2` | Lighter API Key Index (created with API Key) |
 | Testnet | `--use-testnet` | `MARTIN_EXCHANGE_USE_TESTNET` | `false` | Set to true to run on Lighter Testnet |
 | Log Level | `--log-level` | `MARTIN_LOG_LEVEL` | `info` | Logging level (`debug`, `info`, `warn`, `error`) |
@@ -100,11 +100,12 @@ go mod tidy
 go build -o bot cmd/bot/main.go
 
 # Option A: Run using Command Flags
-./bot --api-key="YOUR_HEX_API_KEY" --api-secret="YOUR_ACCOUNT_INDEX" --use-testnet
+./bot --api-key="YOUR_HEX_API_KEY" --account="YOUR_ACCOUNT_INDEX" --api-key-index=8 --use-testnet
 
 # Option B: Run using Environment Variables
 export MARTIN_EXCHANGE_API_KEY="YOUR_HEX_API_KEY"
-export MARTIN_EXCHANGE_API_SECRET="YOUR_ACCOUNT_INDEX"
+export MARTIN_EXCHANGE_ACCOUNT="YOUR_ACCOUNT_INDEX"
+export MARTIN_EXCHANGE_API_KEY_INDEX=8
 export MARTIN_EXCHANGE_USE_TESTNET="true"
 ./bot
 ```
@@ -118,10 +119,10 @@ You can compile and containerize the bot into a clean, minimal image using `ko`:
 ko build --local ./cmd/bot
 
 # Run container with Flags
-docker run --rm ko.local/bot:latest --api-key="YOUR_HEX_API_KEY" --api-secret="YOUR_ACCOUNT_INDEX"
+docker run --rm ko.local/bot:latest --api-key="YOUR_HEX_API_KEY" --account="YOUR_ACCOUNT_INDEX" --api-key-index=8
 
 # Run container with Environment Variables
-docker run --rm -e MARTIN_EXCHANGE_API_KEY="YOUR_HEX_API_KEY" -e MARTIN_EXCHANGE_API_SECRET="YOUR_ACCOUNT_INDEX" ko.local/bot:latest
+docker run --rm -e MARTIN_EXCHANGE_API_KEY="YOUR_HEX_API_KEY" -e MARTIN_EXCHANGE_ACCOUNT="YOUR_ACCOUNT_INDEX" -e MARTIN_EXCHANGE_API_KEY_INDEX=8 ko.local/bot:latest
 ```
 
 ### Health Checks

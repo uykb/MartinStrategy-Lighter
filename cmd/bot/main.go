@@ -25,7 +25,7 @@ import (
 
 type CLI struct {
 	ApiKey      string `help:"Lighter API Key private key (hex)" env:"MARTIN_EXCHANGE_API_KEY" required:""`
-	ApiSecret   string `help:"Lighter Account Index or L1 Wallet Address" env:"MARTIN_EXCHANGE_API_SECRET" required:""`
+	Account     string `help:"Lighter Account Index or L1 Wallet Address" env:"MARTIN_EXCHANGE_ACCOUNT" required:""`
 	ApiKeyIndex uint8  `help:"Lighter API Key Index (0-254)" env:"MARTIN_EXCHANGE_API_KEY_INDEX" default:"2"`
 	UseTestnet  bool   `help:"Use Lighter testnet" env:"MARTIN_EXCHANGE_USE_TESTNET" default:"false"`
 	LogLevel    string `help:"Log level" env:"MARTIN_LOG_LEVEL" default:"info"`
@@ -46,7 +46,7 @@ func main() {
 	cfg := &config.Config{
 		Exchange: config.ExchangeConfig{
 			ApiKey:      cli.ApiKey,
-			ApiSecret:   cli.ApiSecret,
+			Account:     cli.Account,
 			ApiKeyIndex: cli.ApiKeyIndex,
 			Symbol:      "HYPE",
 			UseTestnet:  cli.UseTestnet,
