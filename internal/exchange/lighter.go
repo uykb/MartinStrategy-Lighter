@@ -824,7 +824,11 @@ func (l *LighterAdapter) getDetailedAccount() (*LighterDetailedAccount, error) {
 
 	var acctResp LighterAccountResponse
 	if err := json.Unmarshal(body, &acctResp); err != nil {
-		return nil, err
+		previewLen := 500
+		if len(body) < previewLen {
+			previewLen = len(body)
+		}
+		return nil, fmt.Errorf("解析账户 JSON 失败, 错误: %w, 响应预览: %s", err, string(body[:previewLen]))
 	}
 
 	if acctResp.Code != 200 {
