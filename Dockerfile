@@ -1,5 +1,5 @@
 # Multi-stage build for Go bot
-FROM golang:1.23-alpine AS builder
+FROM golang:alpine AS builder
 
 # Install ca-certificates and git (required for downloading Go modules)
 RUN apk update && apk add --no-cache ca-certificates git
