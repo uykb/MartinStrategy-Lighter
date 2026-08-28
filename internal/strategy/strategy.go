@@ -293,8 +293,8 @@ func (s *MartingaleStrategy) syncState() {
 
 		if pos != nil && math.Abs(pos.Size) > 0 {
 		s.currentState = StateInPosition
-		// 恢复原版逻辑：启动时只要有持仓，就将旧网格全部撤销，然后重新排布完整的9个安全网格单
-		s.gridPlaced = false
+		// 有持仓时：网格不再重新铺设，标记为 true 以防误铺。
+		s.gridPlaced = true
 		utils.Logger.Info("状态同步：检测到持仓",
 			zap.String("state", string(s.currentState)),
 			zap.Float64("size", pos.Size),
@@ -319,8 +319,6 @@ func (s *MartingaleStrategy) syncState() {
 			var liveTPQty float64 
 			for _, o := range orders {
 				if o.Side == exchange.OrderSideBuy {
-					// 撤销旧网格单
-					s.exchange.CancelOrder(o.OrderID)
 					gridCount++
 				}
 				if o.Side == exchange.OrderSideSell && o.Type == exchange.OrderTypeLimit {
@@ -333,10 +331,11 @@ func (s *MartingaleStrategy) syncState() {
 				}
 			}
 
-			if gridCount > 0 {
-				utils.Logger.Info("发现旧的网格限价单，已发送撤销指令以备重新部署", zap.Int("count", gridCount))
-			}
+			utils.Logger.Info("网格订单状态（不修改，保持链上原样）",
+				zap.Int("grid_count", gridCount),
+				zap.Int("max_safety_orders", s.cfg.MaxSafetyOrders))
 
+			// 如果没有止盈单，马上补齐
 			if !hasTP {
 				utils.Logger.Warn("检测到持仓但无 TP 订单，正在恢复 TP...")
 				s.mu.Unlock()
@@ -358,12 +357,6 @@ func (s *MartingaleStrategy) syncState() {
 					zap.Float64("initialized_lastTPQty", s.lastTPQty))
 				s.mu.Unlock()
 			}
-			
-			// 启动异步协程部署全新的 9 个网格
-			go func() {
-				time.Sleep(500 * time.Millisecond) // 等待前面的旧网格撤单生效
-				s.safePlaceGridOrders()
-			}()
 		}	} else {
 		s.currentState = StateIdle
 		s.gridPlaced = false
@@ -1561,6 +1554,7 @@ func (s *MartingaleStrategy) getGridMultiplier(level int) float64 {
 		return 1.16
 	}
 }
+
 
 
 
