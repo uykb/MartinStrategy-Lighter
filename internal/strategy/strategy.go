@@ -291,13 +291,10 @@ func (s *MartingaleStrategy) syncState() {
 	}
 	s.position = pos
 
-	if pos != nil && math.Abs(pos.Size) > 0 {
+		if pos != nil && math.Abs(pos.Size) > 0 {
 		s.currentState = StateInPosition
-		// ★ 业务逻辑：重启时有持仓，gridPlaced 始终设为 true。
-		// 不检测网格完整性、不重新放置——链上已有的网格订单是唯一的真相。
-		// 如果部分网格已成交（如 5/9），重启后重新放置 9 层会导致总共 14 层，
-		// 杠杆过高造成爆仓风险。缺失的网格层级是可接受的（少一层保护而已）。
-		s.gridPlaced = true
+		// 恢复原版逻辑：启动时只要有持仓，就将旧网格全部撤销，然后重新排布完整的9个安全网格单
+		s.gridPlaced = false
 		utils.Logger.Info("状态同步：检测到持仓",
 			zap.String("state", string(s.currentState)),
 			zap.Float64("size", pos.Size),
@@ -305,7 +302,7 @@ func (s *MartingaleStrategy) syncState() {
 
 		orders, err := s.exchange.GetOpenOrders()
 		if err != nil {
-			utils.Logger.Error("获取挂单列表失败，延迟恢复 TP（对账防重复由 updateTP 入口负责）", zap.Error(err))
+			utils.Logger.Error("获取挂单列表失败，延迟恢复 TP（将由 monitorPositionStatus 兜底）", zap.Error(err))
 			s.mu.Unlock()
 			go func() {
 				defer func() {
@@ -319,9 +316,11 @@ func (s *MartingaleStrategy) syncState() {
 		} else {
 			hasTP := false
 			gridCount := 0
-			var liveTPQty float64 // 交易所端 TP 的实际委托数量
+			var liveTPQty float64 
 			for _, o := range orders {
 				if o.Side == exchange.OrderSideBuy {
+					// 撤销旧网格单
+					s.exchange.CancelOrder(o.OrderID)
 					gridCount++
 				}
 				if o.Side == exchange.OrderSideSell && o.Type == exchange.OrderTypeLimit {
@@ -334,9 +333,9 @@ func (s *MartingaleStrategy) syncState() {
 				}
 			}
 
-			utils.Logger.Info("网格订单状态（不修改，保持链上原样）",
-				zap.Int("grid_count", gridCount),
-				zap.Int("max_safety_orders", s.cfg.MaxSafetyOrders))
+			if gridCount > 0 {
+				utils.Logger.Info("发现旧的网格限价单，已发送撤销指令以备重新部署", zap.Int("count", gridCount))
+			}
 
 			if !hasTP {
 				utils.Logger.Warn("检测到持仓但无 TP 订单，正在恢复 TP...")
@@ -351,10 +350,6 @@ func (s *MartingaleStrategy) syncState() {
 					s.safeUpdateTP()
 				}()
 			} else {
-				// ★ 修复：lastTPQty 初始化为交易所端 TP 的实际委托数量（Floor 截断），
-				// 而非当前持仓量。这样若 TP 与持仓不一致（如历史浮点 bug 遗留 2.52 vs 2.53），
-				// 下次 updateTP 的仓位变化检测能识别差异并触发 modify 自愈修正。
-				// 原实现用持仓量初始化会让本地误认为 TP 已对齐，跳过更新，不一致无法自愈。
 				s.lastTPQty = utils.FloorToDecimals(liveTPQty, s.quantityPrecision)
 				utils.Logger.Info("状态已恢复，TP 订单存在",
 					zap.Int("open_orders", len(orders)),
@@ -363,8 +358,13 @@ func (s *MartingaleStrategy) syncState() {
 					zap.Float64("initialized_lastTPQty", s.lastTPQty))
 				s.mu.Unlock()
 			}
-		}
-	} else {
+			
+			// 启动异步协程部署全新的 9 个网格
+			go func() {
+				time.Sleep(500 * time.Millisecond) // 等待前面的旧网格撤单生效
+				s.safePlaceGridOrders()
+			}()
+		}	} else {
 		s.currentState = StateIdle
 		s.gridPlaced = false
 		s.currentTPOrderID = 0
@@ -1561,6 +1561,8 @@ func (s *MartingaleStrategy) getGridMultiplier(level int) float64 {
 		return 1.16
 	}
 }
+
+
 
 
 
