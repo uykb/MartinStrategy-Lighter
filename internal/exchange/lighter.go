@@ -468,7 +468,7 @@ func (l *LighterAdapter) CreateOrder(side OrderSide, orderType OrderTypeKind, qu
 		orderTypeValue = 0 // LIMIT
 		priceValue = uint32(price * math.Pow10(marketInfo.PriceDecimals))
 		timeInForce = 1 // GoodTillTime
-		orderExpiry = time.Now().Add(28 * 24 * time.Hour).UnixMilli()
+		orderExpiry = time.Now().Add(28 * 24 * time.Hour).Unix()
 	} else {
 		orderTypeValue = 1 // MARKET
 		timeInForce = 0    // IOC
