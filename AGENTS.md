@@ -37,8 +37,8 @@ go run cmd/bot/main.go --api-key="YOUR_KEY" --api-secret="YOUR_SECRET"
 ## FSM & Take Profit (TP) Rules
 - **Take Profit Markup**: TP price is a fixed +0.80% (`entryPrice * 1.008`) rounded to price decimals.
 - **TP Anti-Chasing (防追价)**: Skip modifying or recreating TP if `tpPrice <= marketPrice`. This prevents restart/reconnect events from immediately filling a recreated TP limit order at market.
-- **No ReduceOnly on TP**: Although conceptually a closing order, we currently disable the `ReduceOnly` flag for TP limit orders. zkLighter's asynchronous L2 Rollup engine frequently cancels resting ReduceOnly orders after ~40s due to state settlement race conditions.
-- **Delayed TP Placement**: Wait 35s after a grid order fills before placing the TP order. This allows the L2 sequencer to commit the new position state to the rollup, mitigating unexpected rejections.
+- **No ReduceOnly on TP**: Although conceptually a closing order, we disable the `ReduceOnly` flag for TP limit orders. zkLighter's asynchronous L2 Rollup engine frequently cancels resting ReduceOnly orders after ~40s due to state settlement race conditions.
+- **Immediate TP Placement**: Since ReduceOnly is disabled, we no longer need to delay TP placement by 35s. We immediately place the TP order upon partial grid fills using `safeUpdateTP()`, as the L2 sequencer race condition no longer affects generic limit orders.
 - **TP Update Priority**: Prefer `ModifyOrder` (atomic cancel/replace). On failure, query the real exchange state using `findLiveTP()` to determine if the order actually succeeded on the exchange before attempting a manual cancel + create.
 - **No Restart Grid Replacement**: On startup, query the on-chain position and re-calibrate/claim existing TP. Do not re-place grid orders to avoid doubling leverage and liquidation risk.
 - **Cycle Reset**: Upon a SELL FILLED event, poll `GetPosition()` until size is 0 (up to 30s) before resetting the FSM to `IDLE`.
