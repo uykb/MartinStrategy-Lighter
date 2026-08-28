@@ -31,17 +31,19 @@ go run cmd/bot/main.go --api-key="YOUR_KEY" --api-secret="YOUR_SECRET"
 - **Market Order Simulation**: Lighter lacks native market orders; simulate them via IOC limit orders at `price * 1.05` for BUYs, or `price * 0.95` for SELLs. IOC/Market orders MUST carry `order_expiry = 0`, otherwise the SDK rejects them with `OrderExpiry is invalid`.
 - **SkipNonce & Nonce Management**: Set `SkipNonce=1` and use a **millisecond-timestamp** nonce with an atomic CAS counter to guarantee strict monotonic increase. Per official docs the constraint `2^47-1 > new_nonce > old_nonce` must hold — **never use microsecond timestamps** (they exceed `2^47-1` and the exchange rejects them with code `21104 invalid nonce`).
 - **Authentication Required (AWS WAF)**: Lighter's API is behind an AWS WAF bot challenge. Unauthenticated requests from datacenter IPs get a `405 Human Verification` captcha page. Per official docs, authenticate **every** REST request (attach the signed `authorization` header) to bypass IP-based rate limits and move limits to L1-based.
-- **Rate Limits**: Standard REST = 60 requests/min; default transaction type (createOrder) = 40 requests/min; firewall cooldown = 60s static; WS messages = 200/min. Rate-limit errors surface as `HTTP 429`/`405` or API code `23000`. **Entry cooldown after failure is mandatory** (`entryCooldownDuration = 60s`) to stay inside these budgets.
-- **Order Expiry Validation**: Limit orders (GoodTillTime) require a non-zero `order_expiry` between 5 minutes and 30 days; IOC/Market orders require `order_expiry = 0`.
+- **Rate Limits & Order Confirmation**: Standard REST = 60 requests/min. **Never use REST polling to confirm order indexes after CreateOrder**, as it quickly triggers AWS WAF 429/405 bans. Use the WebSocket Promise/Future watcher (`wsManager.WatchOrder(clientOrderIndex)`) which returns the `OrderIndex` via WS in milliseconds, with a 10s REST fallback.
+- **Order Expiry Validation & Server Time**: Limit orders (GoodTillTime) require a non-zero absolute `order_expiry` timestamp in **milliseconds** (not seconds), between 5 minutes and 30 days. To prevent immediate `code 21711: invalid expiry` errors caused by local clock drift, sync the local time with the Lighter server using the HTTP `Date` header and apply the calculated `timeOffset`.
 
 ## FSM & Take Profit (TP) Rules
 - **Take Profit Markup**: TP price is a fixed +0.80% (`entryPrice * 1.008`) rounded to price decimals.
 - **TP Anti-Chasing (防追价)**: Skip modifying or recreating TP if `tpPrice <= marketPrice`. This prevents restart/reconnect events from immediately filling a recreated TP limit order at market.
-- **ReduceOnly**: All TP orders are SELL LIMIT orders and must enforce `ReduceOnly` to prevent opening unintended reverse positions.
+- **No ReduceOnly on TP**: Although conceptually a closing order, we currently disable the `ReduceOnly` flag for TP limit orders. zkLighter's asynchronous L2 Rollup engine frequently cancels resting ReduceOnly orders after ~40s due to state settlement race conditions.
+- **Delayed TP Placement**: Wait 35s after a grid order fills before placing the TP order. This allows the L2 sequencer to commit the new position state to the rollup, mitigating unexpected rejections.
 - **TP Update Priority**: Prefer `ModifyOrder` (atomic cancel/replace). On failure, query the real exchange state using `findLiveTP()` to determine if the order actually succeeded on the exchange before attempting a manual cancel + create.
 - **No Restart Grid Replacement**: On startup, query the on-chain position and re-calibrate/claim existing TP. Do not re-place grid orders to avoid doubling leverage and liquidation risk.
 - **Cycle Reset**: Upon a SELL FILLED event, poll `GetPosition()` until size is 0 (up to 30s) before resetting the FSM to `IDLE`.
 - **Cycle ID Protection**: A sequential `cycleID` tracks FSM generations. Asynchronous cancellations verify that `cycleID` matches before executing to avoid cancelling grid orders placed in a newer cycle.
+- **CANCELED Event Recovery**: If a TP order is unexpectedly cancelled by the exchange (e.g., L2 rejection), reset the internal TP tracker `currentTPOrderID` to 0 so the strategy recreates it automatically on the next cycle.
 
 ## Connection & Synchronization Safeguards
 - **Initial Sync Delay**: Ignore WS `OrderUpdate` events for the first 3 seconds after startup (`initialSyncDone` flag) to drain historical fills sent by the websocket.
