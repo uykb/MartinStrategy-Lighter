@@ -1,4 +1,4 @@
-﻿// Package strategy 实现马丁格尔网格策略的有限状态机 (FSM)。
+// Package strategy 实现马丁格尔网格策略的有限状态机 (FSM)。
 //
 // 安全加固说明（P0/P1 修复）：
 //   - 所有常驻 goroutine 添加 defer recover() + 5秒延迟自愈重启
@@ -1561,6 +1561,7 @@ func (s *MartingaleStrategy) getGridMultiplier(level int) float64 {
 		return 1.16
 	}
 }
+
 
 
 
