@@ -555,13 +555,29 @@ func (s *MartingaleStrategy) handleOrderUpdate(ctx context.Context, event core.E
 
 	if order.Status == "CANCELED" {
 		s.mu.Lock()
-		if order.OrderID == s.currentTPOrderID {
-			utils.Logger.Warn("TP 订单已被取消，重置内部状态以便后续重新挂单", zap.Int64("order_id", order.OrderID))
+		isTPCanceled := (order.OrderID == s.currentTPOrderID)
+		inPosition := (s.currentState == StateInPosition)
+		if isTPCanceled {
+			utils.Logger.Warn("TP 订单已被取消，重置内部状态并在有持仓时自动补挂", zap.Int64("order_id", order.OrderID))
 			s.currentTPOrderID = 0
 			s.lastTPQty = 0
 			s.lastTPPrice = 0
 		}
 		s.mu.Unlock()
+
+		// 若在持仓中且初始同步已完成，异步触发 safeUpdateTP 重新挂单
+		if isTPCanceled && inPosition && s.initialSyncDone.Load() {
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						utils.Logger.Error("TP 撤单恢复 goroutine panic", zap.Any("recover", r))
+					}
+				}()
+				// 适当短暂缓冲，避免立即与 L2 引擎撤单消息发生竞态
+				time.Sleep(500 * time.Millisecond)
+				s.safeUpdateTP()
+			}()
+		}
 	}
 
 	if order.Status == "FILLED" {

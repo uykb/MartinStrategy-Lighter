@@ -615,7 +615,16 @@ func (w *WSManager) handleAccountOrders(orders map[string][]wsLighterOrder) {
 
 			status := strings.ToUpper(o.Status)
 			if strings.HasPrefix(o.Status, "canceled") {
-				utils.Logger.Warn("收到订单取消的底层原因", zap.String("raw_status", o.Status), zap.String("order_id", o.OrderID))
+				utils.Logger.Warn("收到订单取消的底层原因",
+					zap.String("raw_status", o.Status),
+					zap.String("order_id", o.OrderID),
+					zap.Int64("order_index", o.OrderIndex),
+					zap.Int64("client_order_index", o.ClientOrderIndex),
+					zap.Bool("reduce_only", o.ReduceOnly),
+					zap.String("side", o.Side),
+					zap.String("type", o.Type),
+					zap.String("remaining_qty", o.RemainingBaseAmount),
+				)
 				status = "CANCELED"
 			} else if o.Status == "open" {
 				status = "NEW"

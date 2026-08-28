@@ -518,11 +518,12 @@ func (l *LighterAdapter) CreateOrder(side OrderSide, orderType OrderTypeKind, qu
 	}
 
 	var reduceOnlyValue uint8 = 0
-	// 经过多次排查，zkLighter L2 引擎似乎对长时间 Resting 的 ReduceOnly 订单有严格的清算/撤单机制
-	// 为了确保 TP 订单能稳定存活 28 天，我们在此处由策略层自己保证不超卖，而在底层协议中关闭 ReduceOnly。
-	// if side == OrderSideSell {
-	// 	reduceOnlyValue = 1
-	// }
+	// 止盈单（SELL LIMIT 且不是市价平仓单）必须设置 ReduceOnly=1。
+	// 根据 Lighter 官方文档，未设置 ReduceOnly 的反向限价单将被视为尝试建立反向空头仓位，
+	// 从而扣除反向订单保证金（Order Margin）。当账户保证金不足时会被 L2 撮合引擎在周期结算时强制撤单。
+	if side == OrderSideSell && orderType == OrderTypeLimit {
+		reduceOnlyValue = 1
+	}
 
 	clientOrderIndex := time.Now().UnixNano() / 1000 % 281474976710655
 
