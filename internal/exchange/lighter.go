@@ -178,6 +178,8 @@ type LighterAdapter struct {
 	symbolInfo   *SymbolInfo
 	symbolInfoMu sync.RWMutex
 
+	timeOffset int64
+
 	ctx    context.Context
 	cancel context.CancelFunc
 }
@@ -228,10 +230,24 @@ func NewLighterAdapter(cfg *config.ExchangeConfig, bus *core.EventBus) (*Lighter
 }
 
 // Start 启动适配器：获取交易对精度信息 + 启动 WebSocket + 启动 REST 降级
+func (l *LighterAdapter) syncServerTime() {
+	resp, err := http.Head(fmt.Sprintf("%s/api/v1/orderBooks", l.cfg.APIURL))
+	if err == nil {
+		if dateStr := resp.Header.Get("Date"); dateStr != "" {
+			if st, err := time.Parse(time.RFC1123, dateStr); err == nil {
+				l.timeOffset = st.UnixMilli() - time.Now().UnixMilli()
+				utils.Logger.Info("已同步服务器时间偏移", zap.Int64("offset_ms", l.timeOffset))
+			}
+		}
+	}
+}
+
 func (l *LighterAdapter) Start(ctx context.Context) error {
 	if err := l.initSymbolInfo(); err != nil {
 		return fmt.Errorf("初始化交易对精度失败: %w", err)
 	}
+
+	l.syncServerTime()
 
 	utils.Logger.Info("Lighter 适配器启动",
 		zap.String("symbol", l.cfg.Symbol),
@@ -450,6 +466,10 @@ func (l *LighterAdapter) GetBalance() (float64, error) {
 	return 0, nil
 }
 
+func (l *LighterAdapter) getServerTimeMilli() int64 {
+	return time.Now().UnixMilli() + l.timeOffset
+}
+
 // CreateOrder 下单
 func (l *LighterAdapter) CreateOrder(side OrderSide, orderType OrderTypeKind, quantity, price float64) (*OrderResponse, error) {
 	marketInfo, err := l.getMarketInfo()
@@ -468,7 +488,7 @@ func (l *LighterAdapter) CreateOrder(side OrderSide, orderType OrderTypeKind, qu
 		orderTypeValue = 0 // LIMIT
 		priceValue = uint32(price * math.Pow10(marketInfo.PriceDecimals))
 		timeInForce = 1 // GoodTillTime
-		orderExpiry = time.Now().Add(28 * 24 * time.Hour).Unix()
+		orderExpiry = l.getServerTimeMilli() + 28*24*60*60*1000
 	} else {
 		orderTypeValue = 1 // MARKET
 		timeInForce = 0    // IOC
