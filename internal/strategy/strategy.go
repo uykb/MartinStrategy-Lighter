@@ -553,6 +553,17 @@ func (s *MartingaleStrategy) handleOrderUpdate(ctx context.Context, event core.E
 		zap.String("type", string(order.Type)),
 	)
 
+	if order.Status == "CANCELED" {
+		s.mu.Lock()
+		if order.OrderID == s.currentTPOrderID {
+			utils.Logger.Warn("TP 订单已被取消，重置内部状态以便后续重新挂单", zap.Int64("order_id", order.OrderID))
+			s.currentTPOrderID = 0
+			s.lastTPQty = 0
+			s.lastTPPrice = 0
+		}
+		s.mu.Unlock()
+	}
+
 	if order.Status == "FILLED" {
 		// ★ 运行时修复：syncState 完成前忽略所有历史成交事件。
 		// 交易所 WS 可能持续推送数秒历史事件且顺序错乱。
@@ -598,7 +609,7 @@ func (s *MartingaleStrategy) handleOrderUpdate(ctx context.Context, event core.E
 					s.mu.Lock()
 					s.currentState = StateInPosition
 					s.mu.Unlock()
-					go s.safeUpdateTP()
+					s.delayedSafeUpdateTP(35 * time.Second)
 				}
 			} else {
 				// ★ 审计修复：安全订单（加仓单）成交时，始终更新 TP。
@@ -606,7 +617,7 @@ func (s *MartingaleStrategy) handleOrderUpdate(ctx context.Context, event core.E
 				// 原逻辑在 gridPlaced=false 时跳过 TP，会导致重启后不完整网格的
 				// 加仓成交不更新 TP，造成 TP 数量与实际持仓不一致（残余尾仓）。
 				utils.Logger.Info("安全订单成交，重新计算 TP", zap.Float64("execPrice", order.ExecPrice))
-				go s.safeUpdateTP()
+				s.delayedSafeUpdateTP(35 * time.Second)
 			}
 		} else if order.Side == exchange.OrderSideSell {
 			utils.Logger.Info("卖单成交 (TP/手动)，等待持仓归零后重置为 IDLE",
@@ -679,7 +690,7 @@ func (s *MartingaleStrategy) handlePositionUpdate(ctx context.Context, event cor
 		// 有持仓：若处于 IN_POSITION，触发 TP 校准
 		if state == StateInPosition {
 			utils.Logger.Info("持仓更新：触发 TP 校准", zap.Float64("size", pos.Size))
-			go s.safeUpdateTP()
+			s.delayedSafeUpdateTP(35 * time.Second)
 		}
 	} else {
 		// 无持仓但 FSM 非 IDLE：重置状态
@@ -735,6 +746,27 @@ func (s *MartingaleStrategy) placeGridOrdersWithRetry(attempt, maxRetries int) {
 		}
 	}()
 	s.placeGridOrders()
+}
+
+// delayedSafeUpdateTP 异步延迟执行 TP 更新，避免 L2 zk-rollup 的 ReduceOnly 竞态条件
+func (s *MartingaleStrategy) delayedSafeUpdateTP(delay time.Duration) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				utils.Logger.Error("delayedSafeUpdateTP panic 恢复",
+					zap.Any("recover", r),
+					zap.Stack("stack"))
+			}
+		}()
+		utils.Logger.Info("延迟 TP 更新，等待 L2 区块结算完成...", zap.Duration("delay", delay))
+		
+		select {
+		case <-time.After(delay):
+			s.safeUpdateTP()
+		case <-s.ctx.Done():
+			return
+		}
+	}()
 }
 
 // safeUpdateTP 是 updateTP 的安全包装，带 panic 恢复、自愈和并发脏标志。

@@ -518,9 +518,11 @@ func (l *LighterAdapter) CreateOrder(side OrderSide, orderType OrderTypeKind, qu
 	}
 
 	var reduceOnlyValue uint8 = 0
-	if side == OrderSideSell {
-		reduceOnlyValue = 1
-	}
+	// 经过多次排查，zkLighter L2 引擎似乎对长时间 Resting 的 ReduceOnly 订单有严格的清算/撤单机制
+	// 为了确保 TP 订单能稳定存活 28 天，我们在此处由策略层自己保证不超卖，而在底层协议中关闭 ReduceOnly。
+	// if side == OrderSideSell {
+	// 	reduceOnlyValue = 1
+	// }
 
 	clientOrderIndex := time.Now().UnixNano() / 1000 % 281474976710655
 
@@ -560,10 +562,23 @@ func (l *LighterAdapter) CreateOrder(side OrderSide, orderType OrderTypeKind, qu
 
 	var orderID int64
 	if orderType == OrderTypeLimit {
-		orderID, err = l.pollForOrderIndex(clientOrderIndex)
-		if err != nil {
-			utils.Logger.Warn("poll order index failed, falling back to clientOrderIndex", zap.Error(err))
-			orderID = clientOrderIndex
+		// 使用 WebSocket Promise 模式等待订单确认，替换之前低效的 REST 轮询
+		watchCh := l.wsManager.WatchOrder(clientOrderIndex)
+		defer l.wsManager.UnwatchOrder(clientOrderIndex)
+
+		utils.Logger.Debug("等待 WebSocket 订单确认...", zap.Int64("coi", clientOrderIndex))
+		
+		select {
+		case wsOrder := <-watchCh:
+			orderID = wsOrder.OrderIndex
+			utils.Logger.Info("WebSocket 确认订单", zap.Int64("order_id", orderID))
+		case <-time.After(10 * time.Second):
+			utils.Logger.Warn("WebSocket 等待确认超时, 尝试回退到 REST 轮询", zap.Int64("coi", clientOrderIndex))
+			orderID, err = l.pollForOrderIndex(clientOrderIndex)
+			if err != nil {
+				utils.Logger.Warn("REST 回退轮询失败", zap.Error(err))
+				orderID = clientOrderIndex
+			}
 		}
 	} else {
 		orderID = clientOrderIndex

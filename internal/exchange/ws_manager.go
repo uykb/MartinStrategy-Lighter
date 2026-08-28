@@ -105,6 +105,9 @@ type WSManager struct {
 
 	wsActive atomic.Bool
 
+	watchMu  sync.Mutex
+	watchers map[int64]chan *wsLighterOrder
+
 	priceEventCh chan *PriceUpdate
 	orderEventCh chan *OrderUpdate
 
@@ -123,6 +126,7 @@ func NewWSManager(cfg *LighterConfig, bus *core.EventBus, adapter *LighterAdapte
 		pongCh:       make(chan struct{}, 1),
 		priceEventCh: make(chan *PriceUpdate, 500),
 		orderEventCh: make(chan *OrderUpdate, 200),
+		watchers:     make(map[int64]chan *wsLighterOrder),
 	}
 }
 
@@ -561,6 +565,34 @@ func (w *WSManager) handleTicker(t *wsLighterTicker) {
 	}
 }
 
+func (w *WSManager) WatchOrder(coi int64) chan *wsLighterOrder {
+	w.watchMu.Lock()
+	defer w.watchMu.Unlock()
+	ch := make(chan *wsLighterOrder, 1)
+	w.watchers[coi] = ch
+	return ch
+}
+
+func (w *WSManager) UnwatchOrder(coi int64) {
+	w.watchMu.Lock()
+	defer w.watchMu.Unlock()
+	if ch, ok := w.watchers[coi]; ok {
+		close(ch)
+		delete(w.watchers, coi)
+	}
+}
+
+func (w *WSManager) resolveWatcher(o *wsLighterOrder) {
+	w.watchMu.Lock()
+	defer w.watchMu.Unlock()
+	if ch, ok := w.watchers[o.ClientOrderIndex]; ok {
+		select {
+		case ch <- o:
+		default:
+		}
+	}
+}
+
 func (w *WSManager) handleAccountOrders(orders map[string][]wsLighterOrder) {
 	if orders == nil {
 		return
@@ -568,6 +600,9 @@ func (w *WSManager) handleAccountOrders(orders map[string][]wsLighterOrder) {
 
 	for _, list := range orders {
 		for _, o := range list {
+			// 解析并分发给 Watchers (Promise 模式)
+			w.resolveWatcher(&o)
+
 			side := OrderSideBuy
 			if o.IsAsk {
 				side = OrderSideSell
@@ -580,6 +615,7 @@ func (w *WSManager) handleAccountOrders(orders map[string][]wsLighterOrder) {
 
 			status := strings.ToUpper(o.Status)
 			if strings.HasPrefix(o.Status, "canceled") {
+				utils.Logger.Warn("收到订单取消的底层原因", zap.String("raw_status", o.Status), zap.String("order_id", o.OrderID))
 				status = "CANCELED"
 			} else if o.Status == "open" {
 				status = "NEW"
