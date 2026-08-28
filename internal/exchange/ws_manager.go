@@ -29,7 +29,20 @@ type wsLighterEnvelope struct {
 	Channel   string                      `json:"channel"`
 	Timestamp int64                       `json:"timestamp"`
 	Ticker    *wsLighterTicker            `json:"ticker,omitempty"`
+	Orderbook *wsLighterOrderbook         `json:"order_book,omitempty"`
 	Orders    map[string][]wsLighterOrder `json:"orders,omitempty"`
+}
+
+type wsLighterOrderbookLevel struct {
+	Price string `json:"price"`
+	Size  string `json:"size"`
+}
+
+type wsLighterOrderbook struct {
+	Nonce      int64                     `json:"nonce"`
+	BeginNonce int64                     `json:"begin_nonce"`
+	Bids       []wsLighterOrderbookLevel `json:"bids"`
+	Asks       []wsLighterOrderbookLevel `json:"asks"`
 }
 
 type wsLighterTicker struct {
@@ -240,6 +253,21 @@ func (w *WSManager) sendSubscriptions() error {
 		return fmt.Errorf("发送账户订单订阅失败: %w", err)
 	}
 	utils.Logger.Info("已发送账户订单订阅请求", zap.String("channel", orderChannel))
+
+	// 3. 订阅订单簿
+	obChannel := fmt.Sprintf("order_book/%d", marketInfo.MarketID)
+	subOb := wsLighterRequest{
+		Type:    "subscribe",
+		Channel: obChannel,
+	}
+	obData, err := json.Marshal(subOb)
+	if err != nil {
+		return err
+	}
+	if err := w.conn.WriteMessage(websocket.TextMessage, obData); err != nil {
+		return fmt.Errorf("订阅 Orderbook 失败: %w", err)
+	}
+	utils.Logger.Info("已发送 Orderbook 订阅请求", zap.String("channel", obChannel))
 
 	return nil
 }
@@ -494,6 +522,10 @@ func (w *WSManager) handleMessage(message []byte) {
 	switch {
 	case strings.HasPrefix(env.Type, "update/ticker"):
 		w.handleTicker(env.Ticker)
+	case strings.HasPrefix(env.Type, "update/order_book"):
+		w.handleOrderbook(env.Orderbook, false)
+	case strings.HasPrefix(env.Type, "subscribed/order_book"):
+		w.handleOrderbook(env.Orderbook, true)
 	case strings.HasPrefix(env.Type, "update/account_orders") || strings.HasPrefix(env.Type, "subscribed/account_orders"):
 		w.handleAccountOrders(env.Orders)
 	}
@@ -595,5 +627,40 @@ func (w *WSManager) dispatchOrderEvents() {
 		case update := <-w.orderEventCh:
 			w.bus.Publish(core.EventOrderUpdate, update)
 		}
+	}
+}
+
+
+
+
+
+func (w *WSManager) handleOrderbook(ob *wsLighterOrderbook, snapshot bool) {
+	if ob == nil {
+		return
+	}
+
+	parseLevels := func(levels []wsLighterOrderbookLevel) []OrderbookLevel {
+		var res []OrderbookLevel
+		for _, l := range levels {
+			p, _ := strconv.ParseFloat(l.Price, 64)
+			s, _ := strconv.ParseFloat(l.Size, 64)
+			res = append(res, OrderbookLevel{Price: p, Size: s})
+		}
+		return res
+	}
+
+	bids := parseLevels(ob.Bids)
+	asks := parseLevels(ob.Asks)
+
+	localOb := w.adapter.GetLocalOrderbook()
+	if localOb == nil {
+		return
+	}
+
+	if snapshot {
+		localOb.ApplySnapshot(bids, asks)
+		// utils.Logger.Debug("Orderbook snapshot applied")
+	} else {
+		localOb.ApplyDelta(bids, asks)
 	}
 }

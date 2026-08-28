@@ -168,6 +168,7 @@ type LighterAccountAsset struct {
 
 // LighterAdapter 实现 ExchangeAdapter 接口
 type LighterAdapter struct {
+	localOb  *Orderbook
 	cfg        *LighterConfig
 	bus        *core.EventBus
 	txClient   *client.TxClient
@@ -182,6 +183,8 @@ type LighterAdapter struct {
 }
 
 // NewLighterAdapter 创建 Lighter 适配器实例
+func (l *LighterAdapter) GetLocalOrderbook() *Orderbook { return l.localOb }
+
 func NewLighterAdapter(cfg *config.ExchangeConfig, bus *core.EventBus) (*LighterAdapter, error) {
 	lCfg, err := NewLighterConfig(cfg)
 	if err != nil {
@@ -470,10 +473,25 @@ func (l *LighterAdapter) CreateOrder(side OrderSide, orderType OrderTypeKind, qu
 		orderTypeValue = 1 // MARKET
 		timeInForce = 0    // IOC
 		var protectedPrice float64
-		if side == OrderSideBuy {
-			protectedPrice = price * 1.05
+		
+		exactPrice, ok := l.localOb.SimulateMarketOrder(side, quantity)
+		if ok && exactPrice > 0 {
+			// 如果本地订单簿足够，我们用算出的深度价格加减一个 tick 作为保护价
+			tickSize := 1.0 / math.Pow10(marketInfo.PriceDecimals)
+			if side == OrderSideBuy {
+				protectedPrice = exactPrice + tickSize
+			} else {
+				protectedPrice = exactPrice - tickSize
+			}
+			utils.Logger.Info("使用本地订单簿精确计算市价单滑点", zap.Float64("exact_price", exactPrice), zap.Float64("protected_price", protectedPrice))
 		} else {
-			protectedPrice = price * 0.95
+			// 降级使用 5% 保护价
+			if side == OrderSideBuy {
+				protectedPrice = price * 1.05
+			} else {
+				protectedPrice = price * 0.95
+			}
+			utils.Logger.Warn("本地订单簿流动性不足或未同步，降级使用 5% 保护价", zap.Float64("price", price), zap.Float64("protected_price", protectedPrice))
 		}
 		priceValue = uint32(protectedPrice * math.Pow10(marketInfo.PriceDecimals))
 		orderExpiry = 0 // ImmediateOrCancel / Market orders MUST have OrderExpiry = 0
@@ -640,7 +658,6 @@ func (l *LighterAdapter) CancelAllOrders() error {
 	marketIndex := int16(marketInfo.MarketID)
 	txReq := &types.CancelAllOrdersTxReq{
 		TimeInForce: 0,
-		Time:        time.Now().UnixMilli(),
 	}
 
 	transactOpts := l.getTransactOpts()
@@ -1128,3 +1145,5 @@ func intervalToDuration(interval string) time.Duration {
 		return time.Hour
 	}
 }
+
+

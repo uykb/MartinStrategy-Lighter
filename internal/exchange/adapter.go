@@ -135,6 +135,9 @@ type ExchangeAdapter interface {
 	// GetPosition 获取当前交易对的持仓信息
 	GetPosition() (*Position, error)
 
+	// GetLocalOrderbook 获取本地维护的订单簿
+	GetLocalOrderbook() *Orderbook
+
 	// GetBalance 获取账户可用余额（结算货币，通常为 USDC）
 	GetBalance() (float64, error)
 
@@ -165,3 +168,4 @@ type ExchangeAdapter interface {
 	// GetSymbolInfo 返回交易对的精度与限制信息
 	GetSymbolInfo() (*SymbolInfo, error)
 }
+

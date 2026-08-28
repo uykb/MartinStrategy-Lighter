@@ -1,4 +1,4 @@
-// Package strategy 实现马丁格尔网格策略的有限状态机 (FSM)。
+﻿// Package strategy 实现马丁格尔网格策略的有限状态机 (FSM)。
 //
 // 安全加固说明（P0/P1 修复）：
 //   - 所有常驻 goroutine 添加 defer recover() + 5秒延迟自愈重启
@@ -812,7 +812,7 @@ func (s *MartingaleStrategy) safeUpdateTP() {
 // ★ 修复核心：必须在状态变为 IDLE 前撤销所有挂单，否则新周期开启后
 // 旧周期的网格单会欺骗 placeGridOrders 导致不部署新网格。
 func (s *MartingaleStrategy) cleanCycleAndResetToIdle(cycleID uint64) {
-	// 防重复调用检查
+	// 乐观锁二次检查
 	s.mu.RLock()
 	current := s.cycleID
 	state := s.currentState
@@ -823,18 +823,45 @@ func (s *MartingaleStrategy) cleanCycleAndResetToIdle(cycleID uint64) {
 
 	utils.Logger.Info("开始周期清理：撤销全部挂单", zap.Uint64("cycle_id", cycleID))
 
-	// 1. 同步撤销当前交易对的所有挂单（耗时约 100-500ms）
-	// 在此期间，FSM 状态仍非 IDLE，安全阻挡了 tick 触发新周期
-	if err := s.exchange.CancelAllOrders(); err != nil {
-		utils.Logger.Warn("周期清理：撤单可能不完整", zap.Error(err))
-	} else {
-		utils.Logger.Info("周期清理：挂单撤销完成")
+	// 1. 同步发起当前交易对的所有挂单撤销（耗时约 100-500ms）
+	// 在此期间，FSM 状态仍非 IDLE，安全阻挡 tick 触发新入场。
+	success := false
+	for retries := 0; retries < 3; retries++ {
+		if err := s.exchange.CancelAllOrders(); err != nil {
+			utils.Logger.Warn("周期清理：一键撤单失败，准备重试", zap.Error(err), zap.Int("retry", retries+1))
+			time.Sleep(1 * time.Second)
+		} else {
+			utils.Logger.Info("周期清理：一键撤单指令已成功提交")
+			success = true
+			break
+		}
 	}
 
-	// 2. 挂单清理干净后，再敞开大门，允许新周期启动
+	// 2. 兜底检查：如果一键撤单一直报错，或者为了保险起见，检查并逐个撤单
+	if !success {
+		utils.Logger.Warn("周期清理：一键撤单异常，尝试获取所有挂单并逐个撤销...")
+	}
+	time.Sleep(500 * time.Millisecond) // 等待撮合引擎处理撤单
+	orders, err := s.exchange.GetOpenOrders()
+	if err == nil && len(orders) > 0 {
+		utils.Logger.Warn("周期清理：发现遗留挂单，开始逐个撤单...", zap.Int("count", len(orders)))
+		for _, o := range orders {
+			s.exchange.CancelOrder(o.OrderID) 
+		}
+		time.Sleep(1 * time.Second)
+		ordersFinal, errFinal := s.exchange.GetOpenOrders()
+		if errFinal == nil && len(ordersFinal) > 0 {
+			utils.Logger.Error("【致命】周期清理：无法撤销全部挂单，拒绝进入 IDLE！")
+			return 
+		}
+	} else if err != nil {
+		utils.Logger.Error("【致命】周期清理：无法获取挂单状态，拒绝进入 IDLE！", zap.Error(err))
+		return
+	}
+
+	// 3. 确认挂单已清空，重置状态进入下一周期
 	s.resetToIdle(cycleID)
 }
-
 func (s *MartingaleStrategy) resetToIdle(cycleID uint64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1534,3 +1561,6 @@ func (s *MartingaleStrategy) getGridMultiplier(level int) float64 {
 		return 1.16
 	}
 }
+
+
+
