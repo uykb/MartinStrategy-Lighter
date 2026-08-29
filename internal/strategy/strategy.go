@@ -170,8 +170,11 @@ func (s *MartingaleStrategy) Start() {
 	s.bus.Subscribe(core.EventTick, s.handleTick)
 	s.bus.Subscribe(core.EventOrderUpdate, s.handleOrderUpdate)
 
-	// ★ 订阅持仓更新事件（REST 对账后用实际持仓校准 TP）
+	// 监听持仓更新（REST 端点同步）以校准 TP
 	s.bus.Subscribe(core.EventPositionUpdate, s.handlePositionUpdate)
+	
+	// 监听 L2 交易结算事件，以动态确认持仓是否已上链，从而 0 延迟安全挂出 ReduceOnly 止盈单
+	s.bus.Subscribe(core.EventTxExecuted, s.handleTxExecuted)
 
 	// ★ P2 加固：订阅对账冻结/解冻事件
 	s.bus.Subscribe(core.EventResyncStart, s.handleResyncStart)
@@ -690,6 +693,32 @@ func (s *MartingaleStrategy) handleResyncEnd(ctx context.Context, event core.Eve
 // 当 WSManager 在重连对账后发布实际持仓时，此处理器用真实持仓校准 TP：
 //   - 持仓 > 0 且 FSM 处于 IN_POSITION → 触发 safeUpdateTP（仓位变化检测会决定是否实际更新）
 //   - 持仓 = 0 但 FSM 非 IDLE → 重置为 IDLE（可能手动平仓或 TP 已成交但事件丢失）
+// handleTxExecuted 处理 L2 交易已确认事件
+// 通过 Lighter 独有的 account_tx 频道动态获取交易状态
+// 收到交易结算（status=2）时，说明仓位等状态已完全在 L2 确认
+// 此时挂出 ReduceOnly 止盈单是最安全且最快的
+func (s *MartingaleStrategy) handleTxExecuted(ctx context.Context, event core.Event) error {
+	txHash, ok := event.Data.(string)
+	if !ok {
+		return fmt.Errorf("无效的交易哈希事件")
+	}
+
+	utils.Logger.Info("收到 L2 交易确认事件", zap.String("txHash", txHash))
+
+	s.mu.RLock()
+	state := s.currentState
+	s.mu.RUnlock()
+
+	// 如果处于持仓状态，任何一次交易的确认都可能意味着持仓已经成功 Settlement
+	if state == StateInPosition {
+		utils.Logger.Info("持仓中，L2 交易已确认，立即触发 TP 更新")
+		// safeUpdateTP 自带频率限制和持仓对比逻辑，可安全调用
+		s.safeUpdateTP()
+	}
+
+	return nil
+}
+
 func (s *MartingaleStrategy) handlePositionUpdate(ctx context.Context, event core.Event) error {
 	pos, ok := event.Data.(*exchange.Position)
 	if !ok {

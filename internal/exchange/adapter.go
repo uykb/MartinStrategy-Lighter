@@ -54,8 +54,9 @@ type OpenOrder struct {
 
 // OrderResponse 表示下单后的交易所响应
 type OrderResponse struct {
-	OrderID int64  // 交易所分配的订单 ID
+	OrderID int64  // 交易所返回的订单 ID
 	Status  string // "resting" | "filled" | "error"
+	TxHash  string // L2 交易哈希
 }
 
 // OrderUpdate 表示订单状态变更事件（由 WebSocket 推送）

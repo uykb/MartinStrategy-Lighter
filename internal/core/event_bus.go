@@ -26,8 +26,9 @@ type EventType string
 
 const (
 	EventTick           EventType = "TICK"            // 价格更新（携带 *exchange.PriceUpdate）
-	EventOrderUpdate    EventType = "ORDER_UPDATE"    // 订单状态变更
-	EventPositionUpdate EventType = "POSITION_UPDATE" // 持仓变更
+	EventOrderUpdate    EventType = "ORDER_UPDATE"    // 订单状态更新
+	EventPositionUpdate EventType = "POSITION_UPDATE" // 持仓变动
+	EventTxExecuted     EventType = "TX_EXECUTED"     // 链上交易已确认
 	EventLog            EventType = "LOG"             // 日志事件
 	EventStart          EventType = "START"           // 启动事件
 	EventStop           EventType = "STOP"            // 停止事件

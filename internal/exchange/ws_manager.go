@@ -31,6 +31,12 @@ type wsLighterEnvelope struct {
 	Ticker    *wsLighterTicker            `json:"ticker,omitempty"`
 	Orderbook *wsLighterOrderbook         `json:"order_book,omitempty"`
 	Orders    map[string][]wsLighterOrder `json:"orders,omitempty"`
+	Txs       []wsLighterTx               `json:"txs,omitempty"`
+}
+
+type wsLighterTx struct {
+	Hash   string `json:"hash"`
+	Status int    `json:"status"` // 0: pending, 1: queued, 2: executed
 }
 
 type wsLighterOrderbookLevel struct {
@@ -252,11 +258,25 @@ func (w *WSManager) sendSubscriptions() error {
 	if err != nil {
 		return err
 	}
-
 	if err := w.conn.WriteMessage(websocket.TextMessage, orderData); err != nil {
-		return fmt.Errorf("发送账户订单订阅失败: %w", err)
+		return err
 	}
 	utils.Logger.Info("已发送账户订单订阅请求", zap.String("channel", orderChannel))
+
+	txChannel := fmt.Sprintf("account_tx/%d", w.cfg.AccountIndex)
+	subTx := wsLighterRequest{
+		Type:    "subscribe",
+		Channel: txChannel,
+		Auth:    token,
+	}
+	txData, err := json.Marshal(subTx)
+	if err != nil {
+		return err
+	}
+	if err := w.conn.WriteMessage(websocket.TextMessage, txData); err != nil {
+		return err
+	}
+	utils.Logger.Info("已发送账户交易状态订阅请求", zap.String("channel", txChannel))
 
 	// 3. 订阅订单簿
 	obChannel := fmt.Sprintf("order_book/%d", marketInfo.MarketID)
@@ -532,6 +552,16 @@ func (w *WSManager) handleMessage(message []byte) {
 		w.handleOrderbook(env.Orderbook, true)
 	case strings.HasPrefix(env.Type, "update/account_orders") || strings.HasPrefix(env.Type, "subscribed/account_orders"):
 		w.handleAccountOrders(env.Orders)
+	case strings.HasPrefix(env.Type, "update/account_tx"):
+		w.handleAccountTx(env.Txs)
+	}
+}
+
+func (w *WSManager) handleAccountTx(txs []wsLighterTx) {
+	for _, tx := range txs {
+		if tx.Status == 2 {
+			w.bus.Publish(core.EventTxExecuted, tx.Hash)
+		}
 	}
 }
 

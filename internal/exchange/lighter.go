@@ -592,6 +592,7 @@ func (l *LighterAdapter) CreateOrder(side OrderSide, orderType OrderTypeKind, qu
 	return &OrderResponse{
 		OrderID: orderID,
 		Status:  "resting",
+		TxHash:  txHash,
 	}, nil
 }
 
