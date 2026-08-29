@@ -505,13 +505,8 @@ func (l *LighterAdapter) CreateOrder(side OrderSide, orderType OrderTypeKind, qu
 			}
 			utils.Logger.Info("使用本地订单簿精确计算市价单滑点", zap.Float64("exact_price", exactPrice), zap.Float64("protected_price", protectedPrice))
 		} else {
-			// 降级使用 5% 保护价
-			if side == OrderSideBuy {
-				protectedPrice = price * 1.05
-			} else {
-				protectedPrice = price * 0.95
-			}
-			utils.Logger.Warn("本地订单簿流动性不足或未同步，降级使用 5% 保护价", zap.Float64("price", price), zap.Float64("protected_price", protectedPrice))
+			// 本地订单簿未就绪或流动性不足时，直接返回错误，由外层逻辑进行重试
+			return nil, fmt.Errorf("本地订单簿未同步或流动性不足，无法安全计算市价单滑点，拒绝使用 5%% 回退")
 		}
 		priceValue = uint32(protectedPrice * math.Pow10(marketInfo.PriceDecimals))
 		orderExpiry = 0 // ImmediateOrCancel / Market orders MUST have OrderExpiry = 0
