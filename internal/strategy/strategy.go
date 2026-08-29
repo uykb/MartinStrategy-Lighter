@@ -511,9 +511,14 @@ func (s *MartingaleStrategy) waitForFillAndPlaceGrid() {
 			}
 
 			if math.Abs(pos.Size) > 0 {
-				utils.Logger.Info("检测到持仓，开始放置网格订单",
+				utils.Logger.Info("检测到持仓，开始放置网格单",
 					zap.Float64("size", pos.Size),
 					zap.Float64("entry_price", pos.EntryPrice))
+				
+				s.mu.Lock()
+				s.currentState = StateInPosition
+				s.mu.Unlock()
+				
 				s.placeGridOrders()
 				return
 			}
@@ -1203,8 +1208,8 @@ func (s *MartingaleStrategy) placeGridOrders() {
 	}
 	s.mu.Unlock()
 
-	// ★ 修复：在 gridPlaced 状态确定后，再更新 TP（防止 TP 在网格未完成时触发）
-	s.safeUpdateTP()
+	// 🛑 修改：为防止刚开仓后立即挂出 ReduceOnly 导致 Margin Sweep 强制撤销全部订单，必须延迟 35s
+	s.delayedSafeUpdateTP(35 * time.Second)
 }
 
 // placeOrderWithRetry 带重试的下单逻辑（3次重试 + 抖动指数退避）。
