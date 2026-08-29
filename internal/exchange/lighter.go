@@ -222,6 +222,7 @@ func NewLighterAdapter(cfg *config.ExchangeConfig, bus *core.EventBus) (*Lighter
 		httpClient: httpClient,
 		ctx:        ctx,
 		cancel:     cancel,
+		localOb:    NewOrderbook(),
 	}
 
 	adapter.wsManager = NewWSManager(lCfg, bus, adapter)
