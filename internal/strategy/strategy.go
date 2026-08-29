@@ -633,7 +633,7 @@ func (s *MartingaleStrategy) handleOrderUpdate(ctx context.Context, event core.E
 					s.mu.Lock()
 					s.currentState = StateInPosition
 					s.mu.Unlock()
-					s.delayedSafeUpdateTP(35 * time.Second)
+					s.delayedSafeUpdateTP(60 * time.Second)
 				}
 			} else {
 				// ★ 审计修复：安全订单（加仓单）成交时，始终更新 TP。
@@ -641,7 +641,7 @@ func (s *MartingaleStrategy) handleOrderUpdate(ctx context.Context, event core.E
 				// 原逻辑在 gridPlaced=false 时跳过 TP，会导致重启后不完整网格的
 				// 加仓成交不更新 TP，造成 TP 数量与实际持仓不一致（残余尾仓）。
 				utils.Logger.Info("安全订单成交，重新计算 TP", zap.Float64("execPrice", order.ExecPrice))
-				s.delayedSafeUpdateTP(35 * time.Second)
+				s.delayedSafeUpdateTP(60 * time.Second)
 			}
 		} else if order.Side == exchange.OrderSideSell {
 			utils.Logger.Info("卖单成交 (TP/手动)，等待持仓归零后重置为 IDLE",
@@ -740,7 +740,7 @@ func (s *MartingaleStrategy) handlePositionUpdate(ctx context.Context, event cor
 		// 有持仓：若处于 IN_POSITION，触发 TP 校准
 		if state == StateInPosition {
 			utils.Logger.Info("持仓更新：触发 TP 校准", zap.Float64("size", pos.Size))
-			s.delayedSafeUpdateTP(35 * time.Second)
+			s.delayedSafeUpdateTP(60 * time.Second)
 		}
 	} else {
 		// 无持仓但 FSM 非 IDLE：重置状态
@@ -998,7 +998,7 @@ func (s *MartingaleStrategy) waitPositionZeroThenReset(cycleID uint64) {
 	state := s.currentState
 	s.mu.RUnlock()
 	if state == StateInPosition {
-		s.delayedSafeUpdateTP(35 * time.Second)
+		s.delayedSafeUpdateTP(60 * time.Second)
 	}
 }
 
@@ -1237,8 +1237,8 @@ func (s *MartingaleStrategy) placeGridOrders() {
 	}
 	s.mu.Unlock()
 
-	// 🛑 修改：为防止刚开仓后立即挂出 ReduceOnly 导致 Margin Sweep 强制撤销全部订单，必须延迟 35s
-	s.delayedSafeUpdateTP(35 * time.Second)
+	// 🛑 修改：为防止刚开仓后立即挂出 ReduceOnly 导致 Margin Sweep 强制撤销全部订单，必须延迟 60s（原为 35s，延长以应对拥堵）
+	s.delayedSafeUpdateTP(60 * time.Second)
 }
 
 // placeOrderWithRetry 带重试的下单逻辑（3次重试 + 抖动指数退避）。
