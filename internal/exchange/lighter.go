@@ -91,7 +91,7 @@ func lookupAccountIndex(apiURL, walletAddr string) (int64, error) {
 		return 0, err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return 0, err
@@ -168,7 +168,7 @@ type LighterAccountAsset struct {
 
 // LighterAdapter 实现 ExchangeAdapter 接口
 type LighterAdapter struct {
-	localOb  *Orderbook
+	localOb    *Orderbook
 	cfg        *LighterConfig
 	bus        *core.EventBus
 	txClient   *client.TxClient
@@ -355,56 +355,6 @@ func (l *LighterAdapter) GetLatestPrice() (float64, error) {
 	return 0, fmt.Errorf("market symbol %s not found in orderBookDetails", l.cfg.Symbol)
 }
 
-// GetKlines 获取 K 线数据
-func (l *LighterAdapter) GetKlines(interval string, limit int) ([]Candle, error) {
-	marketInfo, err := l.getMarketInfo()
-	if err != nil {
-		return nil, err
-	}
-
-	endTime := time.Now().UnixMilli()
-	duration := intervalToDuration(interval)
-	startTime := endTime - int64(limit)*duration.Milliseconds()
-
-	endpoint := fmt.Sprintf("%s/api/v1/candles?market_id=%d&resolution=%s&start_timestamp=%d&end_timestamp=%d&count_back=%d",
-		l.cfg.APIURL, marketInfo.MarketID, interval, startTime, endTime, limit)
-
-	body, err := l.sendGetRequest(endpoint)
-	if err != nil {
-		return nil, err
-	}
-
-	var apiResp struct {
-		Code    int `json:"code"`
-		Candles []struct {
-			T int64   `json:"t"`
-			O float64 `json:"o"`
-			H float64 `json:"h"`
-			L float64 `json:"l"`
-			C float64 `json:"c"`
-			V float64 `json:"v"`
-		} `json:"c"`
-	}
-
-	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return nil, err
-	}
-
-	candles := make([]Candle, 0, len(apiResp.Candles))
-	for _, c := range apiResp.Candles {
-		candles = append(candles, Candle{
-			OpenTime: c.T,
-			Open:     c.O,
-			High:     c.H,
-			Low:      c.L,
-			Close:    c.C,
-			Volume:   c.V,
-		})
-	}
-
-	return candles, nil
-}
-
 // GetPosition 获取持仓
 func (l *LighterAdapter) GetPosition() (*Position, error) {
 	acct, err := l.getDetailedAccount()
@@ -494,7 +444,7 @@ func (l *LighterAdapter) CreateOrder(side OrderSide, orderType OrderTypeKind, qu
 		orderTypeValue = 1 // MARKET
 		timeInForce = 0    // IOC
 		var protectedPrice float64
-		
+
 		exactPrice, ok := l.localOb.SimulateMarketOrder(side, quantity)
 		if ok && exactPrice > 0 {
 			// 如果本地订单簿足够，我们用算出的深度价格加减一个 tick 作为保护价
@@ -564,7 +514,7 @@ func (l *LighterAdapter) CreateOrder(side OrderSide, orderType OrderTypeKind, qu
 		defer l.wsManager.UnwatchOrder(clientOrderIndex)
 
 		utils.Logger.Debug("等待 WebSocket 订单确认...", zap.Int64("coi", clientOrderIndex))
-		
+
 		select {
 		case wsOrder := <-watchCh:
 			orderID = wsOrder.OrderIndex
@@ -1154,29 +1104,3 @@ func normalizeSymbol(symbol string) string {
 	s = strings.TrimSuffix(s, "/USDC")
 	return strings.ToUpper(s)
 }
-
-// intervalToDuration 解析 K 线时间周期为 time.Duration
-func intervalToDuration(interval string) time.Duration {
-	switch interval {
-	case "1m":
-		return time.Minute
-	case "5m":
-		return 5 * time.Minute
-	case "15m":
-		return 15 * time.Minute
-	case "30m":
-		return 30 * time.Minute
-	case "1h":
-		return time.Hour
-	case "4h":
-		return 4 * time.Hour
-	case "12h":
-		return 12 * time.Hour
-	case "1d":
-		return 24 * time.Hour
-	default:
-		return time.Hour
-	}
-}
-
-

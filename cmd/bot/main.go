@@ -53,7 +53,6 @@ func main() {
 		},
 		Strategy: config.StrategyConfig{
 			MaxSafetyOrders: 9,
-			BaseRatio:       0.06,
 		},
 		Log: config.LogConfig{
 			Level: cli.LogLevel,

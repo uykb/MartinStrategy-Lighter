@@ -3,7 +3,7 @@
 // 安全加固说明（P0/P1 修复）：
 //   - 所有常驻 goroutine 添加 defer recover() + 5秒延迟自愈重启
 //   - handleTick 锁模式优化：网络 I/O 移出锁外
-//   - updateTP 锁模式优化：fetchATR 网络请求移出 RLock
+//   - updateTP 锁模式优化：网络请求移出 RLock
 //   - 引入 PriceUpdate 时间戳防滑点：丢弃超过 2 秒的过期行情
 //   - 添加 Stop() 方法 + context 取消，支持优雅关闭
 //   - FSM 状态转移逻辑完全保留，未做任何修改
@@ -172,7 +172,7 @@ func (s *MartingaleStrategy) Start() {
 
 	// 监听持仓更新（REST 端点同步）以校准 TP
 	s.bus.Subscribe(core.EventPositionUpdate, s.handlePositionUpdate)
-	
+
 	// 监听 L2 交易结算事件，以动态确认持仓是否已上链，从而 0 延迟安全挂出 ReduceOnly 止盈单
 	s.bus.Subscribe(core.EventTxExecuted, s.handleTxExecuted)
 
@@ -294,7 +294,7 @@ func (s *MartingaleStrategy) syncState() {
 	}
 	s.position = pos
 
-		if pos != nil && math.Abs(pos.Size) > 0 {
+	if pos != nil && math.Abs(pos.Size) > 0 {
 		s.currentState = StateInPosition
 		// 有持仓时：网格不再重新铺设，标记为 true 以防误铺。
 		s.gridPlaced = true
@@ -319,7 +319,7 @@ func (s *MartingaleStrategy) syncState() {
 		} else {
 			hasTP := false
 			gridCount := 0
-			var liveTPQty float64 
+			var liveTPQty float64
 			for _, o := range orders {
 				if o.Side == exchange.OrderSideBuy {
 					gridCount++
@@ -360,7 +360,8 @@ func (s *MartingaleStrategy) syncState() {
 					zap.Float64("initialized_lastTPQty", s.lastTPQty))
 				s.mu.Unlock()
 			}
-		}	} else {
+		}
+	} else {
 		s.currentState = StateIdle
 		s.gridPlaced = false
 		s.currentTPOrderID = 0
@@ -517,11 +518,11 @@ func (s *MartingaleStrategy) waitForFillAndPlaceGrid() {
 				utils.Logger.Info("检测到持仓，开始放置网格单",
 					zap.Float64("size", pos.Size),
 					zap.Float64("entry_price", pos.EntryPrice))
-				
+
 				s.mu.Lock()
 				s.currentState = StateInPosition
 				s.mu.Unlock()
-				
+
 				s.placeGridOrders()
 				return
 			}
@@ -693,6 +694,7 @@ func (s *MartingaleStrategy) handleResyncEnd(ctx context.Context, event core.Eve
 // 当 WSManager 在重连对账后发布实际持仓时，此处理器用真实持仓校准 TP：
 //   - 持仓 > 0 且 FSM 处于 IN_POSITION → 触发 safeUpdateTP（仓位变化检测会决定是否实际更新）
 //   - 持仓 = 0 但 FSM 非 IDLE → 重置为 IDLE（可能手动平仓或 TP 已成交但事件丢失）
+//
 // handleTxExecuted 处理 L2 交易已确认事件
 // 通过 Lighter 独有的 account_tx 频道动态获取交易状态
 // 收到交易结算（status=2）时，说明仓位等状态已完全在 L2 确认
@@ -798,7 +800,6 @@ func (s *MartingaleStrategy) placeGridOrdersWithRetry(attempt, maxRetries int) {
 	s.placeGridOrders()
 }
 
-
 // delayedSafeUpdateTP 异步延迟执行 TP 更新，避免 L2 zk-rollup 状态结算竞态条件
 func (s *MartingaleStrategy) delayedSafeUpdateTP(delay time.Duration) {
 	go func() {
@@ -810,7 +811,7 @@ func (s *MartingaleStrategy) delayedSafeUpdateTP(delay time.Duration) {
 			}
 		}()
 		utils.Logger.Info("延迟 TP 更新，等待 L2 区块结算完成...", zap.Duration("delay", delay))
-		
+
 		select {
 		case <-time.After(delay):
 			s.safeUpdateTP()
@@ -922,13 +923,13 @@ func (s *MartingaleStrategy) cleanCycleAndResetToIdle(cycleID uint64) {
 	if err == nil && len(orders) > 0 {
 		utils.Logger.Warn("周期清理：发现遗留挂单，开始逐个撤单...", zap.Int("count", len(orders)))
 		for _, o := range orders {
-			s.exchange.CancelOrder(o.OrderID) 
+			s.exchange.CancelOrder(o.OrderID)
 		}
 		time.Sleep(1 * time.Second)
 		ordersFinal, errFinal := s.exchange.GetOpenOrders()
 		if errFinal == nil && len(ordersFinal) > 0 {
 			utils.Logger.Error("【致命】周期清理：无法撤销全部挂单，拒绝进入 IDLE！")
-			return 
+			return
 		}
 	} else if err != nil {
 		utils.Logger.Error("【致命】周期清理：无法获取挂单状态，拒绝进入 IDLE！", zap.Error(err))
@@ -1332,8 +1333,8 @@ func (s *MartingaleStrategy) findLiveTP() (int64, float64, float64, error) {
 //
 // 核心逻辑（P1 加固 + 仓位变化检测 + modify 优先 + 对账防重复）：
 //   - 入口对账：本地无 TP 记录时查交易所端，认领遗留 TP，避免盲目 create 产生重复
-//   - 仓位大小未变化时跳过更新（不获取 ATR，不修改 TP）
-//   - 仓位大小变化时重新获取 ATR(30m) 计算止盈位置
+//   - 仓位大小未变化时跳过更新（不修改 TP 价格）
+//   - 仓位大小变化时以固定 +0.80% 百分比计算止盈位置
 //   - 优先使用 ModifyOrder 原子替换，避免取消+重建的空窗期
 //   - Modify 失败时对账交易所端真实状态：modify 实际成功则只同步本地状态，
 //     真未成功才降级 cancel + create，杜绝"网络失败 + 交易所端成功"导致的重复 TP
@@ -1403,7 +1404,7 @@ func (s *MartingaleStrategy) updateTP() {
 	newQty := utils.FloorToDecimals(math.Abs(pos.Size), s.quantityPrecision)
 
 	// ★ 仓位变化检测：如果仓位未变且已有 TP 订单，跳过更新
-	// 此时不获取 ATR、不修改 TP 价格，符合"仓位未变不更新止盈位置"的需求
+	// 此时不修改 TP 价格，符合"仓位未变不更新止盈位置"的需求
 	// 入口对账已保证 oldTPID 反映交易所端真实状态，无需担心 oldTPID==0 盲区
 	if newQty == prevQty && oldTPID != 0 {
 		utils.Logger.Debug("updateTP 跳过：仓位未变化",
@@ -1637,10 +1638,3 @@ func (s *MartingaleStrategy) getGridMultiplier(level int) float64 {
 		return 1.16
 	}
 }
-
-
-
-
-
-
-

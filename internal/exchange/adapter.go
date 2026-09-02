@@ -87,16 +87,6 @@ func (p *PriceUpdate) IsStale(maxLatency time.Duration) bool {
 	return time.Since(eventTime) > maxLatency
 }
 
-// Candle 表示一根 K 线数据
-type Candle struct {
-	OpenTime int64   // 开盘时间（毫秒时间戳）
-	Open     float64 // 开盘价
-	High     float64 // 最高价
-	Low      float64 // 最低价
-	Close    float64 // 收盘价
-	Volume   float64 // 成交量
-}
-
 // SymbolInfo 表示交易对的精度与限制信息
 type SymbolInfo struct {
 	QuantityPrecision int     // 数量小数位数
@@ -127,9 +117,6 @@ type ExchangeAdapter interface {
 
 	// GetLatestPrice 通过 REST 获取最新成交价
 	GetLatestPrice() (float64, error)
-
-	// GetKlines 获取指定周期的 K 线数据
-	GetKlines(interval string, limit int) ([]Candle, error)
 
 	// ---- 账户 ----
 
@@ -169,4 +156,3 @@ type ExchangeAdapter interface {
 	// GetSymbolInfo 返回交易对的精度与限制信息
 	GetSymbolInfo() (*SymbolInfo, error)
 }
-

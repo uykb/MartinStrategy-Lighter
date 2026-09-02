@@ -136,7 +136,7 @@ curl http://localhost:8080/readyz    # readiness (WS active + FSM not frozen = 2
 
 ### Core Trading Logic
 
-1. **Entry** — When IDLE and a tick arrives, place a market buy order (using IOC limit order with price protection offset at +5% of market price) for instant fill.
+1. **Entry** — When IDLE and a tick arrives, place a market buy order (simulated via IOC limit order, with the protected price computed from the local orderbook depth + 1 tick) for instant fill. If the local orderbook is unavailable, the order fails fast and is retried — there is no naive 5% slippage fallback.
 2. **Grid deployment** — After the base order fills, place 9 limit buy orders below the entry price using fixed percentage steps.
 3. **Dynamic take-profit** — A single TP sell order always covers the full on-chain position size. TP price = entry price × 1.008 (+0.80%).
 4. **Safety-order sync** — Every time a grid order fills, the bot re-fetches the on-chain position and updates both TP quantity and price.
@@ -260,7 +260,7 @@ Key limits from the [official rate-limits docs](https://apidocs.lighter.xyz/docs
 The strategy enforces a **60-second entry cooldown** after any failed entry attempt, guaranteeing at most 1 `createOrder` per minute — far below the 40/min transaction limit and fully inside the firewall cooldown window. Rate-limit errors surface as `HTTP 429` / `HTTP 405` or API code `23000 (Too Many Requests)`.
 
 ### Market Order Simulation
-Lighter does not support native market orders on matching engine. They are simulated using IOC (Immediate-Or-Cancel) limit orders with a 5% protection boundary. IOC market orders must carry `order_expiry = 0`, otherwise the SDK rejects them with `OrderExpiry is invalid`.
+Lighter does not support native market orders on matching engine. They are simulated using IOC (Immediate-Or-Cancel) limit orders whose protected price is computed by `Orderbook.SimulateMarketOrder()` (depth penetration) padded by 1 `TickSize`. If the local orderbook is unavailable or liquidity is insufficient, the order fails fast and is retried — a naive 5% slippage bound is deliberately avoided. IOC market orders must carry `order_expiry = 0`, otherwise the SDK rejects them with `OrderExpiry is invalid`.
 
 ## Tech Stack
 

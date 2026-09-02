@@ -29,9 +29,6 @@ const (
 	EventOrderUpdate    EventType = "ORDER_UPDATE"    // 订单状态更新
 	EventPositionUpdate EventType = "POSITION_UPDATE" // 持仓变动
 	EventTxExecuted     EventType = "TX_EXECUTED"     // 链上交易已确认
-	EventLog            EventType = "LOG"             // 日志事件
-	EventStart          EventType = "START"           // 启动事件
-	EventStop           EventType = "STOP"            // 停止事件
 	EventResyncStart    EventType = "RESYNC_START"    // 对账开始（冻结 FSM）
 	EventResyncEnd      EventType = "RESYNC_END"      // 对账结束（解冻 FSM）
 )

@@ -1,96 +1,45 @@
-// Package config 提供 Viper 驱动的配置加载，
-// 支持 YAML 文件 + 环境变量覆盖（前缀 MARTIN_）。
+// Package config 提供交易所/策略/日志/健康检查的类型定义。
 //
-// 重构说明：
-//   - ExchangeConfig 已适配为 Lighter 字段
-//   - ApiKey 字段复用为 Lighter API key private key
-//   - ApiSecret 字段复用为 Lighter Account Index 或 L1 Wallet Address
-//   - Symbol 字段采用 Lighter 的 Symbol 命名（如 "HYPE"）
+// 配置来源：
+//   - 配置由 cmd/bot/main.go 通过 kong 解析命令行参数或环境变量（前缀 MARTIN_）构造
+//   - 不再支持 YAML/config.yaml（Docker 部署统一使用环境变量），已移除 viper 依赖
 package config
-
-import (
-	"fmt"
-	"os"
-	"strings"
-
-	"github.com/spf13/viper"
-)
 
 // Config 根配置结构
 type Config struct {
-	Exchange ExchangeConfig `mapstructure:"exchange"`
-	Strategy StrategyConfig `mapstructure:"strategy"`
-	Log      LogConfig      `mapstructure:"log"`
-	Health   *HealthConfig  `mapstructure:"health"` // ★ P2 加固：健康检查配置
+	Exchange ExchangeConfig
+	Strategy StrategyConfig
+	Log      LogConfig
+	Health   *HealthConfig // ★ P2 加固：健康检查配置
 }
 
 // ExchangeConfig 交易所配置
 //
 // Lighter 适配说明：
-//   - api_key:       Lighter API Key 的私钥（Hex 格式）
-//   - account:       Lighter Account Index 或 L1 钱包地址（Hex 格式，含 0x 前缀）
-//   - api_key_index: Lighter API Key Index (通常为 2-254)
-//   - symbol:        交易对名称（固定为 "HYPE"）
-//   - use_testnet:   是否使用 Lighter 测试网
+//   - ApiKey:       Lighter API Key 的私钥（Hex 格式）
+//   - Account:      Lighter Account Index 或 L1 钱包地址（Hex 格式，含 0x 前缀）
+//   - ApiKeyIndex:  Lighter API Key Index (通常为 2-254)
+//   - Symbol:       交易对名称（固定为 "HYPE"）
+//   - UseTestnet:   是否使用 Lighter 测试网
 type ExchangeConfig struct {
-	ApiKey      string `mapstructure:"api_key"`       // Lighter API key private key
-	Account     string `mapstructure:"account"`       // Lighter Account Index 或 L1 Wallet Address
-	ApiKeyIndex uint8  `mapstructure:"api_key_index"` // Lighter API Key Index (通常为 2-254)
-	Symbol      string `mapstructure:"symbol"`        // 交易对（固定为 "HYPE"）
-	UseTestnet  bool   `mapstructure:"use_testnet"`   // 是否使用测试网
+	ApiKey      string // Lighter API key private key
+	Account     string // Lighter Account Index 或 L1 Wallet Address
+	ApiKeyIndex uint8  // Lighter API Key Index (通常为 2-254)
+	Symbol      string // 交易对（固定为 "HYPE"）
+	UseTestnet  bool   // 是否使用测试网
 }
 
 // StrategyConfig 策略配置
 type StrategyConfig struct {
-	MaxSafetyOrders int     `mapstructure:"max_safety_orders"` // 最大网格层数
-	BaseRatio       float64 `mapstructure:"base_ratio"`        // 头仓比例（余额 × base_ratio）
+	MaxSafetyOrders int // 最大网格层数
 }
 
 // LogConfig 日志配置
 type LogConfig struct {
-	Level string `mapstructure:"level"`
+	Level string
 }
 
 // HealthConfig 健康检查配置（★ P2 加固）
 type HealthConfig struct {
-	Addr string `mapstructure:"addr"` // 监听地址（如 ":8080"）
-}
-
-// LoadConfig 加载配置，支持 YAML 文件 + 环境变量覆盖（前缀 MARTIN_）。
-// 如果 config.yaml 不存在，则纯靠环境变量 + 默认值运行（适合 Docker 部署）。
-func LoadConfig(path string) (*Config, error) {
-	viper.SetConfigFile(path)
-	viper.SetConfigType("yaml")
-
-	// 设置默认值（Docker 部署时无需 config.yaml）
-	viper.SetDefault("exchange.symbol", "HYPE")
-	viper.SetDefault("exchange.use_testnet", false)
-	viper.SetDefault("strategy.max_safety_orders", 9)
-	viper.SetDefault("strategy.base_ratio", 0.05)
-	viper.SetDefault("log.level", "info")
-	viper.SetDefault("health.addr", ":8080")
-
-	// 环境变量覆盖（前缀 MARTIN_，如 MARTIN_EXCHANGE_API_KEY）
-	viper.SetEnvPrefix("MARTIN")
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	// ★ 关键：必须用 BindEnv 显式绑定，AutomaticEnv() 在 Unmarshal 时不生效
-	viper.BindEnv("exchange.api_key")
-	viper.BindEnv("exchange.account")
-	viper.BindEnv("exchange.api_key_index")
-	viper.AutomaticEnv()
-
-	// config.yaml 可选：不存在时不报错，纯靠环境变量 + 默认值
-	if err := viper.ReadInConfig(); err != nil {
-		if !os.IsNotExist(err) {
-			// 文件存在但格式错误，仍然报错
-			return nil, fmt.Errorf("读取配置文件失败: %w", err)
-		}
-		// 文件不存在：使用环境变量 + 默认值
-	}
-
-	var cfg Config
-	if err := viper.Unmarshal(&cfg); err != nil {
-		return nil, fmt.Errorf("解析配置失败: %w", err)
-	}
-	return &cfg, nil
+	Addr string // 监听地址（如 ":8080"）
 }

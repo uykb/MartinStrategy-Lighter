@@ -705,10 +705,6 @@ func (w *WSManager) dispatchOrderEvents() {
 	}
 }
 
-
-
-
-
 func (w *WSManager) handleOrderbook(ob *wsLighterOrderbook, snapshot bool) {
 	if ob == nil {
 		return

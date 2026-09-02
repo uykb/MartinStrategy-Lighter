@@ -38,7 +38,7 @@ go run cmd/bot/main.go --api-key="YOUR_KEY" --api-secret="YOUR_SECRET"
 - **Take Profit Markup**: TP price is a fixed +0.80% (`entryPrice * 1.008`) rounded to price decimals.
 - **TP Anti-Chasing (防追价)**: Skip modifying or recreating TP if `tpPrice <= marketPrice`. This prevents restart/reconnect events from immediately filling a recreated TP limit order at market.
 - **ReduceOnly Required**: TP orders are SELL LIMIT orders and MUST enforce `ReduceOnly` to prevent opening unintended reverse positions.
-- **Delayed TP Placement**: Wait 35s after a grid order fills before placing the TP order. This delay allows the L2 sequencer to commit the new position state to the rollup. Placing a `ReduceOnly` order before the position is fully settled on L2 causes it to be canceled (~38s later) by the L2 Margin Sweep engine.
+- **Delayed TP Placement**: Wait 60s after a grid order fills before placing the TP order (previously 35s; extended to weather severe L2 congestion). This delay allows the L2 sequencer to commit the new position state to the rollup. Placing a `ReduceOnly` order before the position is fully settled on L2 causes it to be canceled (~38s later) by the L2 Margin Sweep engine.
 - **TP Update Priority**: Prefer `ModifyOrder` (atomic cancel/replace). On failure, query the real exchange state using `findLiveTP()` to determine if the order actually succeeded on the exchange before attempting a manual cancel + create.
 - **No Restart Grid Replacement**: On startup, query the on-chain position and re-calibrate/claim existing TP. Do not re-place grid orders to avoid doubling leverage and liquidation risk.
 - **Cycle Reset**: Upon a SELL FILLED event, poll `GetPosition()` until size is 0 (up to 30s) before resetting the FSM to `IDLE`.
